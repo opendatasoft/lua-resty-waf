@@ -137,9 +137,7 @@ function _M.parse_request_body(waf, request_headers, collections)
 		-- https://github.com/openresty/lua-nginx-module/commit/86bea01b244938e0ab6eda780906c06fa62c3b5c
 		if ngx.req.http_version() >= 2 and request_headers["content-length"] == nil then
 			logger.warn(waf, "HTTP2/HTTP3 request without a Content-Length header")
-			if waf._mode == "ACTIVE" then
-				ngx.exit(ngx.HTTP_FORBIDDEN)
-			end
+			ngx.exit(400)
 		end
 
 		if waf._allow_json_content_type and util.table_has_value(content_type_header, waf.json_content_types) then
