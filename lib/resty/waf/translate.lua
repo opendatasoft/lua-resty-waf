@@ -2,7 +2,7 @@ local _M = {}
 
 local base = require "resty.waf.base"
 
-local rex = require "rex_pcre"
+local rex = require "rex_pcre2"
 
 local re_find   = rex.find
 local re_match  = rex.match
