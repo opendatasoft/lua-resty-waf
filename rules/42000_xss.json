@@ -1992,7 +1992,7 @@
                "compress_whitespace"
             ]
          },
-         "pattern" : "\\import\\b",
+         "pattern" : "\\\\import\\b",
          "vars" : [
             {
                "parse" : [
