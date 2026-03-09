@@ -15,7 +15,7 @@ OPM_LIBS   = hamishforbes/lua-resty-iputils p0pr0ck5/lua-resty-cookie \
 MAKE_LIBS  = $(C_LIBS) decode
 SO_LIBS    = libac.so libinjection.so libhtmlentities.so libdecode.so
 RULES      = rules
-ROCK_DEPS  = "lrexlib-pcre 2.7.2-1" busted luafilesystem
+ROCK_DEPS  = "lrexlib-pcre 2.7.2-1" lrexlib-pcre2 busted luafilesystem
 
 LOCAL_LIB_DIR = lib/resty
 
@@ -60,6 +60,7 @@ clean-rocks:
 	for ROCK in $(ROCK_DEPS); do \
 		$(LUAROCKS) remove --tree=$(OPENRESTY_PREFIX) $$ROCK; \
 	done
+	rm -f $(OPENRESTY_PREFIX)/lualib/rex_pcre2.so
 
 clean-test:
 	rm -rf t/servroot*
@@ -136,6 +137,10 @@ install-rocks:
 	for ROCK in $(ROCK_DEPS); do \
 		$(LUAROCKS) install --tree=$(OPENRESTY_PREFIX) $$ROCK; \
 	done
+	# translate.lua requires rex_pcre2, but luarocks' own --tree layout
+	# ($(OPENRESTY_PREFIX)/lib/lua/5.1/) isn't on nginx's default
+	# lua_package_cpath; copy it where nginx will actually find it
+	cp $(OPENRESTY_PREFIX)/lib/lua/5.1/rex_pcre2.so $(OPENRESTY_PREFIX)/lualib/
 
 install-link: install-check
 	$(INSTALL_SOFT) $(PWD)/lib/resty/* $(LUA_LIB_DIR)/resty/
