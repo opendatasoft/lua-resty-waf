@@ -82,6 +82,7 @@ lua-resty-htmlentities:
 	cp $@/libhtmlentities.so lib/
 
 libinjection:
+	./tools/fix-libinjection-py3.sh
 	cd $@ && make all
 	cp $@/src/$@.so lib/
 
