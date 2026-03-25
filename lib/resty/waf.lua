@@ -203,6 +203,10 @@ end
 
 -- transform collection values based on rule opts
 local function _do_transform(self, collection, transform)
+	if collection == nil then
+		return nil -- dont transform if the collection was nil, i.e. a specific arg key dne
+	end
+
 	local t = {}
 
 	if type(transform) == "table" then
@@ -219,10 +223,6 @@ local function _do_transform(self, collection, transform)
 				t[k] = _do_transform(self, collection[k], transform)
 			end
 		elseif type(collection) == "string" then
-			if not collection then
-				return collection -- dont transform if the collection was nil, i.e. a specific arg key dne
-			end
-
 			--_LOG_"doing transform of type " .. transform .. " on collection value " .. tostring(collection)
 			return transform_t.lookup[transform](self, collection)
 		end

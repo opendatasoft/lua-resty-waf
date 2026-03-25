@@ -23,7 +23,10 @@ local _cidr_cache = {}
 _M.version = base.version
 
 function _M.equals(a, b)
-	local equals, value, reason = a
+	-- must not default to `a`: for an empty-table `a` (e.g. a transformed
+	-- absent header), the loop below never runs, and an empty table is
+	-- truthy, so a bare `= a` initializer would report a false match
+	local equals, value, reason
 	if type(a) == "table" then
 		for _, v in ipairs(a) do
 			equals, value = _M.equals(v, b)
@@ -44,7 +47,8 @@ function _M.equals(a, b)
 end
 
 function _M.greater(a, b)
-	local greater, value, reason = a
+	-- see the comment in _M.equals about not defaulting to `a`
+	local greater, value, reason
 
 	if type(a) == "table" then
 		for _, v in ipairs(a) do
@@ -66,7 +70,8 @@ function _M.greater(a, b)
 end
 
 function _M.less(a, b)
-	local less, value, reason = a
+	-- see the comment in _M.equals about not defaulting to `a`
+	local less, value, reason
 
 	if type(a) == "table" then
 		for _, v in ipairs(a) do
@@ -88,7 +93,8 @@ function _M.less(a, b)
 end
 
 function _M.greater_equals(a, b)
-	local greater_equals, value, reason = a
+	-- see the comment in _M.equals about not defaulting to `a`
+	local greater_equals, value, reason
 
 	if type(a) == "table" then
 		for _, v in ipairs(a) do
@@ -110,7 +116,8 @@ function _M.greater_equals(a, b)
 end
 
 function _M.less_equals(a, b)
-	local less_equals, value, reason = a
+	-- see the comment in _M.equals about not defaulting to `a`
+	local less_equals, value, reason
 
 	if type(a) == "table" then
 		for _, v in ipairs(a) do
@@ -132,7 +139,8 @@ function _M.less_equals(a, b)
 end
 
 function _M.exists(needle, haystack)
-	local exists, value, reason = needle
+	-- see the comment in _M.equals about not defaulting to `a`
+	local exists, value, reason
 
 	if type(needle) == "table" then
 		for _, v in ipairs(needle) do
@@ -155,7 +163,8 @@ function _M.exists(needle, haystack)
 end
 
 function _M.contains(haystack, needle)
-	local contains, value, reason = needle
+	-- see the comment in _M.equals about not defaulting to `a`
+	local contains, value, reason
 
 	if type(needle) == "table" then
 		for _, v in ipairs(needle) do
