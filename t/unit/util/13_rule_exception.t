@@ -79,14 +79,20 @@ GET /t
 
 			util.rule_exception(exception_table, rule)
 
-			ngx.say(table.concat(exception_table.meta_ids[12345], ", "))
+			-- "^b" matches both "baz" and "bat" in exception_table.tags,
+			-- whose relative order isn't guaranteed since rule_exception
+			-- collects them via pairs(); sort to compare the resulting
+			-- set rather than depending on iteration order
+			local ids = exception_table.meta_ids[12345]
+			table.sort(ids)
+			ngx.say(table.concat(ids, ", "))
 		}
 	}
 --- request
 GET /t
 --- error_code: 200
 --- response_body
-4, 5, 6, 4, 5, 6, 1, 2, 3
+1, 2, 3, 4, 4, 5, 5, 6, 6
 --- no_error_log
 [error]
 

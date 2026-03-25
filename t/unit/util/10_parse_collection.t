@@ -65,6 +65,9 @@ bat
 			local lookup     = require "resty.waf.util"
 			local collection = ngx.req.get_uri_args()
 			local keys       = lookup.parse_collection["keys"]({}, collection, "foo")
+			-- table_keys collects via pairs(), whose iteration order
+			-- isn't guaranteed, so sort before comparing
+			table.sort(keys)
 			for i in ipairs(keys) do
 				ngx.say(keys[i])
 			end
@@ -74,8 +77,8 @@ bat
 GET /t?foo=bar&baz=qux
 --- error_code: 200
 --- response_body
-foo
 baz
+foo
 --- no_error_log
 [error]
 
@@ -87,6 +90,9 @@ baz
 			local lookup     = require "resty.waf.util"
 			local collection = ngx.req.get_uri_args()
 			local keys       = lookup.parse_collection["keys"]({}, collection, "foo")
+			-- table_keys collects via pairs(), whose iteration order
+			-- isn't guaranteed, so sort before comparing
+			table.sort(keys)
 			for i in ipairs(keys) do
 				ngx.say(keys[i])
 			end
@@ -96,8 +102,8 @@ baz
 GET /t?foo=bar&foo=bat&baz=qux
 --- error_code: 200
 --- response_body
-foo
 baz
+foo
 --- no_error_log
 [error]
 
@@ -109,6 +115,9 @@ baz
 			local lookup     = require "resty.waf.util"
 			local collection = ngx.req.get_uri_args()
 			local values     = lookup.parse_collection["values"]({}, collection, "foo")
+			-- table_values collects via pairs(), whose iteration order
+			-- isn't guaranteed, so sort before comparing
+			table.sort(values)
 			for i in ipairs(values) do
 				ngx.say(values[i])
 			end
@@ -131,6 +140,9 @@ qux
 			local lookup     = require "resty.waf.util"
 			local collection = ngx.req.get_uri_args()
 			local values     = lookup.parse_collection["values"]({}, collection, "foo")
+			-- table_values collects via pairs(), whose iteration order
+			-- isn't guaranteed, so sort before comparing
+			table.sort(values)
 			for i in ipairs(values) do
 				ngx.say(values[i])
 			end
@@ -154,6 +166,10 @@ qux
 			local lookup     = require "resty.waf.util"
 			local collection = ngx.req.get_uri_args()
 			local all        = lookup.parse_collection["all"]({}, collection, "foo")
+			-- "all" concatenates table_keys()/table_values(), both
+			-- collected via pairs(), whose iteration order isn't
+			-- guaranteed, so sort before comparing
+			table.sort(all)
 			for i in ipairs(all) do
 				ngx.say(all[i])
 			end
@@ -163,9 +179,9 @@ qux
 GET /t?foo=bar&baz=qux
 --- error_code: 200
 --- response_body
-foo
-baz
 bar
+baz
+foo
 qux
 --- no_error_log
 [error]
@@ -178,6 +194,10 @@ qux
 			local lookup     = require "resty.waf.util"
 			local collection = ngx.req.get_uri_args()
 			local all        = lookup.parse_collection["all"]({}, collection, "foo")
+			-- "all" concatenates table_keys()/table_values(), both
+			-- collected via pairs(), whose iteration order isn't
+			-- guaranteed, so sort before comparing
+			table.sort(all)
 			for i in ipairs(all) do
 				ngx.say(all[i])
 			end
@@ -187,10 +207,10 @@ qux
 GET /t?foo=bar&foo=bat&baz=qux
 --- error_code: 200
 --- response_body
-foo
-baz
 bar
 bat
+baz
+foo
 qux
 --- no_error_log
 [error]
