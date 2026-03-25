@@ -44,10 +44,14 @@ GET /t
 User-Agent: lua-resty-waf Dummy
 --- error_code: 200
 --- error_log eval
+# cjson encodes the log entry's plain Lua table via pairs(), whose
+# iteration order isn't guaranteed, so any of these fields can end up
+# last in the JSON with no trailing comma before the closing brace,
+# so don't require one
 [
-qr/"client":"127.0.0.1",/,
-qr/"method":"GET",/,
-qr/"uri":"\\\/t",/,
+qr/"client":"127.0.0.1"/,
+qr/"method":"GET"/,
+qr/"uri":"\\\/t"/,
 qr/"alerts":\[/,
 qr/"id":"[a-f0-9]{20}"/
 ]
