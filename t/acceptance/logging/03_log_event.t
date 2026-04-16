@@ -2,7 +2,9 @@ use Test::Nginx::Socket::Lua;
 use Cwd qw(cwd);
 
 repeat_each(3);
-plan tests => repeat_each() * 4 * blocks();
+# TEST 1 has 4 assertions, TEST 2 has 5 (its error_log/no_error_log
+# checks were split into field-presence regexes -- see TEST 2 below)
+plan tests => repeat_each() * (4 + 5);
 
 my $pwd = cwd();
 
@@ -79,8 +81,16 @@ GET /t?arg=foo2&otherarg=bar
 User-Agent: testy mctesterson
 Accept: */*
 --- error_code: 200
---- error_log
-"alerts":[{"match":"bar","id":"12346"}]
+--- error_log eval
+# the logged alert table also carries match_var/match_var_name, and is
+# encoded by cjson via pairs(), whose field order isn't guaranteed, so
+# check field presence independently instead of one ordered substring
+[
+qr/"alerts":\[/,
+qr/"id":"12346"/,
+qr/"match":"bar"/,
+]
 --- no_error_log
 [error]
-"match":"foo2","id":"12346"
+--- no_error_log eval
+[qr/"match":"foo2"/]
