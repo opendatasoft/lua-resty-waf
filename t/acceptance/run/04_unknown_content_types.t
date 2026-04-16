@@ -25,6 +25,7 @@ __DATA__
 			local waf           = lua_resty_waf:new()
 
 			waf:set_option("debug", true)
+			waf:set_option("mode", "ACTIVE")
 			waf:exec()
         }
 
