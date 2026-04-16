@@ -261,10 +261,17 @@ $::HttpConfig . q#
 		}
 
 		content_by_lua_block {
+			-- ngx.ctx is iterated via pairs(), whose order isn't
+			-- guaranteed, so collect and sort the keys before printing
+			local keys = {}
 			for k in pairs(ngx.ctx) do
 				if (k ~= "__altered") then
-					ngx.say(tostring(k) .. ": " .. tostring(ngx.ctx[k]) .. " (" .. type(ngx.ctx[k]) .. ")")
+					keys[#keys + 1] = k
 				end
+			end
+			table.sort(keys)
+			for _, k in ipairs(keys) do
+				ngx.say(tostring(k) .. ": " .. tostring(ngx.ctx[k]) .. " (" .. type(ngx.ctx[k]) .. ")")
 			end
 		}
 	}
