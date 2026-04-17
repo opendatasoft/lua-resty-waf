@@ -10,6 +10,7 @@ lua-resty-waf - High-performance WAF built on the OpenResty stack
 * [Requirements](#requirements)
 * [Performance](#performance)
 * [Installation](#installation)
+* [Testing](#testing)
 * [Synopsis](#synopsis)
 * [Public Functions](#public-functions)
 	* [lua-resty-waf.load_secrules()](#lua-resty-wafload_secrules)
@@ -128,6 +129,25 @@ Alternatively, install via Luarocks:
 lua-resty-waf makes use of the [OPM](https://github.com/openresty/opm) package manager, available in modern OpenResty distributions. The client OPM tools requires that the `resty` command line tool is available in your system's `PATH` environmental variable.
 
 Note that by default lua-resty-waf runs in SIMULATE mode, to prevent immediately affecting an application; users who wish to enable rule actions must explicitly set the operational mode to ACTIVE.
+
+## Testing
+
+The test suite runs inside a pinned container, so results depend on the code rather than on the host. Docker is the only prerequisite:
+
+```sh
+# make test-docker                    # everything
+# make test-docker SUITE=t/unit/util  # one directory, or a single .t file
+```
+
+This builds the image from `ci/Dockerfile` and runs `t/unit`, `t/acceptance`, `t/regression`, `t/translate`, `t/translation`, the vendored C library tests and `tools/lua-releng`, finishing with `RESULT: PASS` or `RESULT: FAIL`.
+
+Also available: `make shell-docker` for a shell in the same image, `make manifest` to regenerate `ci/manifest.lock`, and `make verify-manifest` to fail when the pins no longer resolve as recorded.
+
+Dependency versions are pinned in `ci/versions.env`, and the image is built locally rather than pulled. Tests run with no network access, and the source is mounted read-only and built on a copy, so a run leaves the working tree untouched.
+
+On a network that blocks port 80 or intercepts TLS, put CA certificates in `ci/extra-ca/` and overrides such as `APT_SCHEME=https` in `ci/local.env`. Both are ignored by git.
+
+The `make test-unit`, `test-acceptance`, `test-regression` and `test-translate` targets still run against the host, but assume a provisioned OpenResty and are not the supported path.
 
 ## Synopsis
 

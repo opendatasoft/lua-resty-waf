@@ -1,0 +1,3 @@
+extra-ca/*.crt
+local.env
+manifest.actual

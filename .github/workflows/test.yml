@@ -1,0 +1,36 @@
+name: test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Nothing is ever published by this workflow. The test image is built
+# in-job, used, and discarded. So no packages: write, no registry, no
+# credentials.
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # ratchet:actions/checkout@v4
+        with:
+          # libinjection, lua-aho-corasick and lua-resty-htmlentities are
+          # submodules; `make` builds all three.
+          submodules: recursive
+
+      # Byte-for-byte the command a developer runs locally. CI gets no
+      # special code path, which is what keeps "green in CI" and "green
+      # on my machine" the same claim rather than two that happen to agree.
+      #
+      # Builds the pinned image, then runs all seven gates with the
+      # network switched off.
+      - name: Run the suite
+        run: make test-docker

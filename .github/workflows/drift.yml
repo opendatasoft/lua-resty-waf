@@ -1,0 +1,32 @@
+name: drift
+
+# The test image is never stored, so there is no golden copy to fall back
+# on if an upstream version disappears. This job is the early warning:
+# it re-resolves every pin against upstream and fails when the resolved
+# set stops matching ci/manifest.lock.
+#
+# The known weak link is openresty.org, which prunes old versions and
+# offers no snapshot service. Finding that out on a Monday is much
+# cheaper than finding it out mid-release.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays, 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # ratchet:actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # --no-cache is the entire point: reuse a cached layer and this
+      # job would happily confirm a world that no longer exists.
+      - name: Verify pins still resolve as recorded
+        run: make verify-manifest DOCKER_BUILD_FLAGS=--no-cache

@@ -21,7 +21,8 @@ LOCAL_LIB_DIR = lib/resty
 
 .PHONY: all test install clean test-unit test-acceptance test-regression \
 test-translate lua-aho-corasick lua-resty-htmlentities libinjection \
-clean-libinjection clean-lua-aho-corasick install-opm-libs clean-opm-libs
+clean-libinjection clean-lua-aho-corasick install-opm-libs clean-opm-libs \
+image test-docker shell-docker manifest verify-manifest
 
 all: $(MAKE_LIBS) debug-macro
 
@@ -113,6 +114,39 @@ test-libs: clean all test-lua-aho-corasick test-lua-resty-htmlentities \
 	test-libinjection
 
 test-recursive: test test-libs
+
+# hermetic container test environment
+# The supported way to run the suite. Every pin lives in ci/versions.env;
+# the image is built locally, used, and never pushed anywhere.
+CI_DIR              = ci
+CI_IMAGE           ?= lua-resty-waf-ci:local
+CI_BUILD_ARGS       = $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=\(.*\)/--build-arg \1=\2/p' $(CI_DIR)/versions.env)
+# Optional per-machine overrides for networks that block :80 or MITM TLS
+# (e.g. APT_SCHEME=https). Gitignored: local infrastructure, not project
+# configuration, so it must never change what CI or a laptop resolves.
+CI_LOCAL_ARGS       = $(shell test -f $(CI_DIR)/local.env && sed -n 's/^\([A-Z_][A-Z0-9_]*\)=\(.*\)/--build-arg \1=\2/p' $(CI_DIR)/local.env)
+DOCKER_BUILD_FLAGS ?=
+
+image:
+	docker build -t $(CI_IMAGE) $(CI_BUILD_ARGS) $(CI_LOCAL_ARGS) $(DOCKER_BUILD_FLAGS) \
+		-f $(CI_DIR)/Dockerfile $(CI_DIR)
+
+# --network none is load-bearing: it is what proves no test reaches
+# outside the container. Source is read-only; the build happens on a
+# copy inside (tools/debug-macro.sh rewrites lib/resty/**.lua in place).
+# Narrow a run with: make test-docker SUITE=t/unit/util
+test-docker: image
+	docker run --rm --network none -v $(PWD):/src:ro -e SUITE="$(SUITE)" $(CI_IMAGE)
+
+shell-docker: image
+	docker run --rm -it --network none -v $(PWD):/src:ro $(CI_IMAGE) /bin/bash
+
+manifest: image
+	docker run --rm --entrypoint /ci/manifest.sh $(CI_IMAGE) > $(CI_DIR)/manifest.lock
+
+verify-manifest: image
+	docker run --rm --entrypoint /ci/manifest.sh $(CI_IMAGE) > /tmp/manifest.actual
+	diff -u $(CI_DIR)/manifest.lock /tmp/manifest.actual
 
 test-fast: all
 	TEST_NGINX_RANDOMIZE=1 PATH=$(OPENRESTY_PREFIX)/nginx/sbin:$$PATH prove \

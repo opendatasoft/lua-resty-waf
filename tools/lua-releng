@@ -19,6 +19,13 @@ if ($#ARGV != -1) {
 
 } else {
     @luas = map glob, qw{ *.lua lib/*.lua lib/*/*.lua lib/*/*/*.lua lib/*/*/*/*.lua lib/*/*/*/*/*.lua };
+
+    # Third-party vendored sources are not ours to lint. lib/util.lua is
+    # an unmodified copy of Mozilla's heka util module (MPL-2.0) that
+    # lib/resty/waf/util.lua requires; it uses globals this check flags.
+    my %vendored = map { $_ => 1 } qw{ lib/util.lua };
+    @luas = grep { !$vendored{$_} } @luas;
+
     if (-d 't') {
         @tests = map glob, qw{ t/*.t t/*/*.t t/*/*/*.t };
     }
