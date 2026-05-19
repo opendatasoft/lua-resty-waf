@@ -381,6 +381,24 @@ local function _calculate_offset(ruleset)
 	end
 end
 
+-- check for duplicate rule IDs and precompute jump offsets for a newly
+-- parsed ruleset. returns true, or nil plus an error if it should not be
+-- registered into _ruleset_defs. pass a registry shared across several
+-- rulesets to check for collisions between them, or omit it to only
+-- check within this one ruleset (add_ruleset rulesets may legitimately
+-- reuse IDs across independent, mutually exclusive locations/vhosts)
+local function _validate_and_calculate(name, rs, registry)
+	local ok, err = util.check_duplicate_ids(name, rs, registry or {})
+
+	if not ok then
+		return nil, err
+	end
+
+	_calculate_offset(rs)
+
+	return true
+end
+
 -- merge the default and any custom rules
 local function _merge_rulesets(self)
 	local default = _global_rulesets
@@ -408,12 +426,15 @@ local function _merge_rulesets(self)
 			if not _ruleset_defs[k] then
 				local rs, err = util.parse_ruleset(v)
 
-				if err then
-					logger.fatal_fail("Could not load " .. k)
-				else
+				if not err then
 					--_LOG_"Doing offset calculation of " .. k
-					_calculate_offset(rs)
+					local ok
+					ok, err = _validate_and_calculate(k, rs)
+				end
 
+				if err then
+					logger.fatal_fail("Could not load " .. k .. ": " .. tostring(err))
+				else
 					_ruleset_defs[k] = rs
 					_ruleset_def_cnt = _ruleset_def_cnt + 1
 
@@ -535,12 +556,15 @@ function _M.exec(self, opts)
 			local err
 			rs, err = util.load_ruleset_file(ruleset)
 
+			if not err then
+				--_LOG_"Doing offset calculation of " .. ruleset
+				local ok
+				ok, err = _validate_and_calculate(ruleset, rs)
+			end
+
 			if err then
 				logger.fatal_fail(err)
 			else
-				--_LOG_"Doing offset calculation of " .. ruleset
-				_calculate_offset(rs)
-
 				_ruleset_defs[ruleset] = rs
 				_ruleset_def_cnt = _ruleset_def_cnt + 1
 
@@ -687,21 +711,44 @@ function _M.init()
 	-- do offset jump calculations for default rulesets
 	-- this is also lazily handled in exec() for rulesets
 	-- that dont appear here
+	local errors, errors_n = {}, 0
+
+	-- one registry shared across all default rulesets, so a rule id
+	-- reused between any two of them is caught
+	local id_registry = {}
+
 	for _, ruleset in ipairs(_global_rulesets) do
-		local rs, err, calc
+		local rs, err
 
 		rs, err = util.load_ruleset_file(ruleset)
 
-		if err then
-			ngx.log(ngx.ERR, err)
-		else
-			_calculate_offset(rs)
+		if not err then
+			local ok
+			ok, err = _validate_and_calculate(ruleset, rs, id_registry)
+		end
 
+		if err then
+			errors_n = errors_n + 1
+			errors[errors_n] = ruleset .. ": " .. err
+		else
 			_ruleset_defs[ruleset] = rs
 			_ruleset_def_cnt = _ruleset_def_cnt + 1
 
 			_build_exception_table()
 		end
+	end
+
+	if errors_n > 0 then
+		for i = 1, errors_n do
+			ngx.log(ngx.ERR, "lua-resty-waf: invalid default ruleset - ", errors[i])
+		end
+
+		-- init_by_lua* runs in the new master before it takes over from
+		-- the old one, so an uncaught error here fails the reload and
+		-- keeps the old master running, instead of going live and then
+		-- 500ing every request once exec() tries to load the same ruleset
+		error("lua-resty-waf: refusing to start with " .. errors_n ..
+			" invalid default ruleset(s), see error log for details", 0)
 	end
 end
 
@@ -737,7 +784,11 @@ function _M.load_secrules(ruleset, opts, err_tab)
 
 	local name = string.gsub(ruleset, "(.*/)(.*)", "%2")
 
-	_calculate_offset(chains)
+	local ok, err = _validate_and_calculate(name, chains)
+
+	if not ok then
+		error("lua-resty-waf: refusing to load " .. name .. ": " .. err, 0)
+	end
 
 	_ruleset_defs[name] = chains
 	_ruleset_def_cnt = _ruleset_def_cnt + 1

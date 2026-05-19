@@ -210,6 +210,50 @@ local function _strip_trailing_commas(data)
 	return table_concat(out)
 end
 
+-- check that no rule ID in this ruleset is already in the registry.
+-- rule IDs are used as lookup keys (ignore_rule, sieve_rule, skip_after,
+-- the msg/tag exception table), so a duplicate is a hard error -- except
+-- a chain's non-head links, which legitimately repeat the chain head's
+-- id (see rule_calc._M.calculate, which threads a chain via consecutive
+-- rules where every link but the last has actions.disrupt == "CHAIN")
+function _M.check_duplicate_ids(name, ruleset, registry)
+	local errors, errors_n = {}, 0
+
+	for phase, rules in pairs(ruleset) do
+		local prev_rule
+
+		for _, rule in ipairs(rules) do
+			local id = rule.id
+			local is_chain_link = prev_rule and prev_rule.id == id and
+				prev_rule.actions and prev_rule.actions.disrupt == "CHAIN"
+
+			if not is_chain_link then
+				local seen_in = registry[id]
+
+				if seen_in == name then
+					errors_n = errors_n + 1
+					errors[errors_n] = "rule id " .. tostring(id) ..
+						" is defined more than once in ruleset " .. name
+				elseif seen_in then
+					errors_n = errors_n + 1
+					errors[errors_n] = "rule id " .. tostring(id) .. " in ruleset " ..
+						name .. " is already defined in ruleset " .. seen_in
+				else
+					registry[id] = name
+				end
+			end
+
+			prev_rule = rule
+		end
+	end
+
+	if errors_n > 0 then
+		return nil, table_concat(errors, "; ")
+	end
+
+	return true
+end
+
 -- safely attempt to parse a JSON string as a ruleset
 function _M.parse_ruleset(data)
 	local jdata
