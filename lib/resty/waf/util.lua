@@ -154,11 +154,68 @@ function _M.parse_dynamic_value(waf, key, collections)
 	return tonumber(str) and tonumber(str) or str
 end
 
+-- strip harmless trailing commas, e.g. ["aaa","bbb",] or {"aaa":1,}.
+-- string contents are left untouched, so this can't change a rule's
+-- meaning, only tolerate a stray comma between elements.
+local function _strip_trailing_commas(data)
+	local out = {}
+	local out_n = 0
+	local n = #data
+	local i = 1
+	local in_string = false
+
+	while i <= n do
+		local c = string_sub(data, i, i)
+
+		if in_string then
+			out_n = out_n + 1
+			out[out_n] = c
+
+			if c == "\\" and i < n then
+				-- copy the escaped char without interpreting it,
+				-- so an escaped quote doesn't end the string early
+				i = i + 1
+				out_n = out_n + 1
+				out[out_n] = string_sub(data, i, i)
+			elseif c == '"' then
+				in_string = false
+			end
+		elseif c == '"' then
+			in_string = true
+			out_n = out_n + 1
+			out[out_n] = c
+		elseif c == "," then
+			local j = i + 1
+			while j <= n and string_find(string_sub(data, j, j), "%s") do
+				j = j + 1
+			end
+
+			local nextc = j <= n and string_sub(data, j, j)
+
+			if nextc == "]" or nextc == "}" then
+				-- drop the comma, resume before the closing bracket
+				i = j - 1
+			else
+				out_n = out_n + 1
+				out[out_n] = c
+			end
+		else
+			out_n = out_n + 1
+			out[out_n] = c
+		end
+
+		i = i + 1
+	end
+
+	return table_concat(out)
+end
+
 -- safely attempt to parse a JSON string as a ruleset
 function _M.parse_ruleset(data)
 	local jdata
+	local cleaned = _strip_trailing_commas(data)
 
-	if pcall(function() jdata = cjson.decode(data) end) then
+	if pcall(function() jdata = cjson.decode(cleaned) end) then
 		return jdata, nil
 	else
 		return nil, "could not decode " .. data

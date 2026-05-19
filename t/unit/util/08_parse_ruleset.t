@@ -66,3 +66,106 @@ could not decode {"foo":"bar","baz":["bat","qux]}
 --- no_error_log
 [error]
 
+=== TEST 3: A trailing comma in an array is tolerated
+--- http_config eval: $::HttpConfig
+--- config
+    location = /t {
+        content_by_lua_block {
+			local util = require "resty.waf.util"
+			local str  = [=[{"foo":"bar","baz":["bat","qux",]}]=]
+
+			local parse, err = util.parse_ruleset(str)
+
+			ngx.say(parse.foo)
+			ngx.say(parse.baz[1])
+			ngx.say(parse.baz[2])
+			ngx.say(#parse.baz)
+			ngx.say(err)
+		}
+	}
+--- request
+GET /t
+--- error_code: 200
+--- response_body
+bar
+bat
+qux
+2
+nil
+--- no_error_log
+[error]
+
+=== TEST 4: A trailing comma in an object is tolerated
+--- http_config eval: $::HttpConfig
+--- config
+    location = /t {
+        content_by_lua_block {
+			local util = require "resty.waf.util"
+			local str  = [=[{"foo":"bar","baz":"qux",}]=]
+
+			local parse, err = util.parse_ruleset(str)
+
+			ngx.say(parse.foo)
+			ngx.say(parse.baz)
+			ngx.say(err)
+		}
+	}
+--- request
+GET /t
+--- error_code: 200
+--- response_body
+bar
+qux
+nil
+--- no_error_log
+[error]
+
+=== TEST 5: A comma inside a rule pattern is never touched by trailing-comma relaxation
+--- http_config eval: $::HttpConfig
+--- config
+    location = /t {
+        content_by_lua_block {
+			local util = require "resty.waf.util"
+			-- pattern has a quantifier and a literal ",}" in a char
+			-- class, then a real trailing comma. only the real one
+			-- should be removed
+			local str  = [=[{"pattern":"\\d{2,4}[a-z,}]",}]=]
+
+			local parse, err = util.parse_ruleset(str)
+
+			ngx.say(parse.pattern)
+			ngx.say(err)
+		}
+	}
+--- request
+GET /t
+--- error_code: 200
+--- response_body
+\d{2,4}[a-z,}]
+nil
+--- no_error_log
+[error]
+
+=== TEST 6: A non-trailing double comma is still a hard parse error
+--- http_config eval: $::HttpConfig
+--- config
+    location = /t {
+        content_by_lua_block {
+			local util = require "resty.waf.util"
+			local str  = [=[{"foo":"bar",,"baz":"qux"}]=]
+
+			local parse, err = util.parse_ruleset(str)
+
+			ngx.say(type(parse))
+			ngx.say(err ~= nil)
+		}
+	}
+--- request
+GET /t
+--- error_code: 200
+--- response_body
+nil
+true
+--- no_error_log
+[error]
+
