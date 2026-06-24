@@ -499,6 +499,14 @@ function _M.parse_vars(raw_vars)
 			end
 
 			if not prev_parsed_var.ignore then prev_parsed_var.ignore = {} end
+
+			-- ngx.req.get_headers()/ngx.resp.get_headers() always return
+			-- lowercase header names, regardless of how the client/upstream
+			-- sent them, so ignored header names must be lowercased to match
+			if var == "REQUEST_HEADERS" or var == "RESPONSE_HEADERS" then
+				specific = string.lower(specific)
+			end
+
 			table.insert(prev_parsed_var.ignore, specific)
 
 			parsed = prev_parsed_var
