@@ -794,6 +794,19 @@ function _M.load_secrules(ruleset, opts, err_tab)
 	_ruleset_def_cnt = _ruleset_def_cnt + 1
 end
 
+-- vars sharing the same collection type (e.g. ARGS/ARGS_NAMES both target
+-- REQUEST_ARGS) are only told apart by their parse kind (values/keys/etc);
+-- "all" mode reads both keys and values, so it's compatible with either
+local function _sieve_parse_matches(sieve_parse, target_parse)
+	local skind = sieve_parse and sieve_parse[1]
+	local tkind = target_parse and target_parse[1]
+
+	if skind == tkind then return true end
+	if skind == "all" or tkind == "all" then return true end
+
+	return false
+end
+
 -- add extra sieve elements to a rule on a per-instance basis
 function _M.sieve_rule(self, id, sieves)
 	-- pointer to our rule
@@ -816,18 +829,24 @@ function _M.sieve_rule(self, id, sieves)
 		end
 	end
 
+	if not self.target_update_map[id] then
+		ngx.log(ngx.WARN, "rule " .. id .. " is not valid to sieve from")
+		return
+	end
+
 	for _, sieve in ipairs(sieves) do
 		local found
-		local arg = ""
+		local arg = {}
 
 		if translate.valid_vars[sieve.type] then
-			arg = translate.valid_vars[sieve.type].type
+			arg = translate.valid_vars[sieve.type]
 		end
 
 		-- search for the rule here
 		for i = 1, #self.target_update_map[id] do
 			-- found it, append the sieves (ignore for now)
-			if arg == self.target_update_map[id][i].type then
+			if arg.type == self.target_update_map[id][i].type
+				and _sieve_parse_matches(arg.parse, self.target_update_map[id][i].parse) then
 				local elts = type(sieve.elts) == "table" and sieve.elts
 					or { sieve.elts }
 
@@ -850,7 +869,7 @@ function _M.sieve_rule(self, id, sieves)
 			end
 
 			if not found then
-				ngx.log(ngx.WARN, arg .. " undefined in rule " .. id)
+				ngx.log(ngx.WARN, (arg.type or "") .. " undefined in rule " .. id)
 			end
 		end
 	end
@@ -875,17 +894,18 @@ function _M.sieve_ruleset(self, ruleset_name, sieves)
 
 	for _, sieve in ipairs(sieves) do
 		local found
-		local arg = ""
+		local arg = {}
 
 		if translate.valid_vars[sieve.type] then
-			arg = translate.valid_vars[sieve.type].type
+			arg = translate.valid_vars[sieve.type]
 		end
 
 		-- search for the rule here
 		for rule_id, rule in pairs(self.target_update_map) do
 			for i = 1, #rule do
 				-- found it, append the sieves (ignore for now)
-				if arg == rule[i].type then
+				if arg.type == rule[i].type
+					and _sieve_parse_matches(arg.parse, rule[i].parse) then
 					local elts = type(sieve.elts) == "table" and sieve.elts
 						or { sieve.elts }
 
@@ -898,7 +918,7 @@ function _M.sieve_ruleset(self, ruleset_name, sieves)
 					end
 
 					-- set/update the var's collection key
-					rule[1].collection_key =
+					rule[i].collection_key =
 						calc.build_collection_key(
 							rule[i],
 							target_update_map_opts_transform[rule_id])
@@ -909,7 +929,7 @@ function _M.sieve_ruleset(self, ruleset_name, sieves)
 			end
 
 			if not found then
-				ngx.log(ngx.WARN, arg .. " undefined in rule " .. rule_id)
+				ngx.log(ngx.WARN, (arg.type or "") .. " undefined in rule " .. rule_id)
 			end
 		end
 	end
