@@ -55,6 +55,7 @@ function _M.parse_request_body(waf, request_headers, collections)
 		local FILES_NAMES = {}
 		local FILES_SIZES = {}
 		local FILES_TMP_CONTENT = {}
+		local FIELDS
 
 		ngx.req.init_body()
 		form:set_timeout(1000)
@@ -63,7 +64,7 @@ function _M.parse_request_body(waf, request_headers, collections)
 		ngx.req.append_body("--" .. form.boundary)
 
 		-- this is gonna need some tlc, but it seems to work for now
-		local lasttype, chunk, file, body, body_size, files_size
+		local lasttype, chunk, file, body, body_size, files_size, is_file
 		files_size = 0
 		body_size  = 0
 		body = ''
@@ -82,7 +83,12 @@ function _M.parse_request_body(waf, request_headers, collections)
 					table.insert(FILES_NAMES, file)
 
 					s, f = header:find('filename="([^"]+")')
-					if s then table.insert(FILES, header:sub(s + 10, f - 1)) end
+					if s then
+						table.insert(FILES, header:sub(s + 10, f - 1))
+						is_file = true
+					else
+						is_file = false
+					end
 				end
 
 				chunk = res[3] -- form:read() returns { key, value, line } here
@@ -95,6 +101,7 @@ function _M.parse_request_body(waf, request_headers, collections)
 
 				local chunk_size = #chunk
 
+				body = body .. chunk
 				body_size = body_size + #chunk
 
 				--_LOG_"c:" .. chunk_size .. ", b:" .. body_size
@@ -106,7 +113,16 @@ function _M.parse_request_body(waf, request_headers, collections)
 				body_size = 0
 
 				FILES_TMP_CONTENT[file] = body
+
+				-- non-file fields also need to be inspectable as ARGS,
+				-- same as urlencoded/JSON bodies
+				if not is_file then
+					if not FIELDS then FIELDS = {} end
+					FIELDS[file] = body
+				end
+
 				body = ''
+				is_file = nil
 
 				ngx.req.append_body("\r\n--" .. form.boundary)
 			elseif typ == "eof" then
@@ -128,7 +144,7 @@ function _M.parse_request_body(waf, request_headers, collections)
 		collections.FILES_TMP_CONTENT = FILES_TMP_CONTENT
 		collections.FILES_COMBINED_SIZE = files_size
 
-		return nil
+		return FIELDS
 	else
 		-- remove charset from the content-type (e.g. application/json;charset=utf-8 -> application/json)
 		content_type_header = string.match(content_type_header, "[^;]+")

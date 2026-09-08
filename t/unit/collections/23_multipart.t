@@ -199,3 +199,38 @@ value
 --- no_error_log
 [error]
 
+=== TEST 6: non-file fields are returned for ARGS, file fields are not
+--- http_config eval: $::HttpConfig
+--- config
+	location /t {
+		access_by_lua_block {
+			local request = require "resty.waf.request"
+
+			local collections = {}
+
+			local fields = request.parse_request_body(
+				{
+					_pcre_flags = 'joi',
+					_process_multipart_body = true,
+				},
+				{
+					["content-type"] = ngx.req.get_headers()['content-type']
+				},
+				collections
+			)
+
+			ngx.say(fields.test)
+			ngx.say(fields.file1 == nil and "nil" or fields.file1)
+		}
+	}
+--- more_headers
+Content-Type: multipart/form-data; boundary=---------------------------820127721219505131303151179
+--- request eval
+q#POST /t# . $::mock_upload
+--- error_code: 200
+--- response_body
+value
+nil
+--- no_error_log
+[error]
+
