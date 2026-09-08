@@ -820,7 +820,10 @@ function _M.sieve_rule(self, id, sieves)
 			if self.target_update_map[id] then break end
 
 			for i, rule in ipairs(rules) do
-				if rule.id == tonumber(id) then
+				-- rule.id is a number for JSON-defined rulesets (decoded by
+				-- cjson) but a string for SecRule-translated ones, so compare
+				-- as strings rather than assuming either representation
+				if tostring(rule.id) == tostring(id) then
 					orig_rule = rule
 					self.target_update_map[id] = util.table_copy(rule.vars)
 					break

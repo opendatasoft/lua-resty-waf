@@ -1,0 +1,6 @@
+# fixture for sieve_rule/sieve_ruleset unit tests: a rule with two vars
+# that share the REQUEST_ARGS collection type but differ in parse kind
+# (ARGS -> values, ARGS_NAMES -> keys), used to check that sieving one
+# doesn't leak onto the other. ARGS is listed first so a type-only match
+# (the bug) would incorrectly pick vars[1] when sieving ARGS_NAMES.
+SecRule ARGS|ARGS_NAMES "zzz_never_matches_zzz" "id:22222,phase:2,msg:'multi var sieve fixture',deny"
