@@ -29,6 +29,17 @@ local mt = { __index = _M }
 
 _M.version = base.version
 
+-- Options whose default is nil, and which therefore leave no key in the
+-- defaults table built by _M.new(). set_option needs them to tell a real
+-- option from a typo. Keep in sync with that table.
+local _nil_default_opts = {
+	event_log_periodic_flush = true,
+	event_log_ssl_sni_host   = true,
+	event_log_target_host    = true,
+	event_log_target_path    = true,
+	event_log_target_port    = true,
+}
+
 -- default list of rulesets
 local _global_rulesets = {
 	"11000_whitelist",
@@ -641,7 +652,6 @@ function _M.new()
 		_event_log_target_host       = nil,
 		_event_log_target_path       = nil,
 		_event_log_target_port       = nil,
-		_event_log_verbosity         = 1,
 		_hook_actions                = {},
 		_ignore_rule                 = {},
 		_ignore_ruleset              = {},
@@ -701,6 +711,21 @@ function _M.set_option(self, option, value, data)
 			options.lookup[option](self, value, data)
 		else
 			local _option = "_" .. option
+
+			-- Unknown options used to be accepted silently, so a typo
+			-- such as "event_log_taget" looked like it had worked while
+			-- doing nothing at all. Warn rather than fail, so that a
+			-- misconfiguration is visible without taking down a worker.
+			--
+			-- Presence in the defaults is the test, except for the
+			-- options defaulting to nil: a nil value creates no key, so
+			-- they have to be listed explicitly.
+			if self[_option] == nil and not _nil_default_opts[option] then
+				logger.warn(self, "tried to set unknown option '" ..
+					tostring(option) .. "'; check the spelling against the " ..
+					"option list in the README")
+			end
+
 			self[_option] = value
 		end
 	end

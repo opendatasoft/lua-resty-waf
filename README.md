@@ -82,11 +82,11 @@ lua-resty-waf - High-performance WAF built on the OpenResty stack
 
 ## Status
 
-[![Build Status](https://travis-ci.org/p0pr0ck5/lua-resty-waf.svg?branch=development)](https://travis-ci.org/p0pr0ck5/lua-resty-waf)
-[![Codewake](https://www.codewake.com/badges/ask_question.svg)](https://www.codewake.com/p/lua-resty-waf)
-[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/761/badge)](https://bestpractices.coreinfrastructure.org/projects/761)
+[![test](https://github.com/opendatasoft/lua-resty-waf/actions/workflows/test.yml/badge.svg)](https://github.com/opendatasoft/lua-resty-waf/actions/workflows/test.yml)
 
-*NOTE*: `lua-resty-waf` is essentially abandoned. This project had a use in a time when ModSecurity for Nginx was not a viable option; this is no longer the case. There was an attempt to revitalize the project in 2020, but I do not have the resources to complete this; this work is partially complete in the `redux` branch.
+This repository is a fork of [p0pr0ck5/lua-resty-waf](https://github.com/p0pr0ck5/lua-resty-waf), which its author describes as essentially abandoned: it had a use at a time when ModSecurity for Nginx was not a viable option, and that is no longer the case. An attempt to revitalise it in 2020 was left partially complete on the upstream `redux` branch.
+
+This fork is maintained for our own use and carries fixes that upstream never received, among them PCRE2 and Debian bookworm compatibility, HTTP/2 and HTTP/3 handling, JSON body parsing, and a reproducible test suite. Install it from this repository rather than from LuaRocks: the published `lua-resty-waf` rock is upstream's last release and contains none of these fixes. Report issues against this repository.
 
 ## Description
 
@@ -96,15 +96,16 @@ lua-resty-waf was initially developed by Robert Paprocki for his Master's thesis
 
 ## Requirements
 
-lua-resty-waf requires several third-party resty lua modules, though these are all packaged with lua-resty-waf, and thus do not need to be installed separately. It is recommended to install lua-resty-waf on a system running the OpenResty software bundle; lua-resty-waf has not been tested on platforms built using separate Nginx source and Nginx Lua module packages.
+It is recommended to install lua-resty-waf on a system running the OpenResty software bundle; lua-resty-waf has not been tested on platforms built using separate Nginx source and Nginx Lua module packages.
 
-For optimal regex compilation performance, it is recommended to build Nginx/OpenResty with a version of PCRE that supports JIT compilation. If your OS does not provide this, you can build JIT-capable PCRE directly into your Nginx/OpenResty build. To do this, reference the path to the PCRE source in the `--with-pcre` configure flag. For example:
+lua-resty-waf depends on several third-party modules that are **not** bundled with it. `make install-deps` installs them all:
 
-```sh
-# ./configure --with-pcre=/path/to/pcre/source --with-pcre-jit
-```
+* OPM: `lua-resty-iputils`, `lua-resty-cookie`, `lua-ffi-libinjection`, `lua-resty-logger-socket`
+* LuaRocks: `lrexlib-pcre2`, and `luafilesystem`
 
-You can download the PCRE source from the [PCRE website](http://www.pcre.org/). See also this [blog post](https://www.cryptobells.com/building-openresty-with-pcre-jit/) for a step-by-step walkthrough on building OpenResty with a JIT-enabled PCRE library.
+Note that `lrexlib-pcre2` is required by every deployment, not only by users of `load_secrules()`: `resty.waf` loads `resty.waf.translate` when the module is first required, and that in turn requires `rex_pcre2`. If it is missing, or is installed somewhere outside nginx's `lua_package_cpath`, workers fail at startup with `module 'rex_pcre2' not found`. `make install-deps` copies it into `$OPENRESTY_PREFIX/lualib/` for this reason.
+
+Modern OpenResty releases bundle a JIT-capable PCRE2 library, which is what lua-resty-waf expects, so no special configure flags are normally needed for regex performance.
 
 ## Performance
 
@@ -120,13 +121,11 @@ A simple Makefile is provided:
 # make && sudo make install
 ```
 
-Alternatively, install via Luarocks:
+`make install` builds the bundled C libraries, installs the third-party dependencies listed under [Requirements](#requirements), and copies everything into `$OPENRESTY_PREFIX` (`/usr/local/openresty` by default).
 
-```
-# luarocks install lua-resty-waf
-```
+Do not install this fork from LuaRocks: the published `lua-resty-waf` rock is upstream's last release and does not contain the fixes carried here.
 
-lua-resty-waf makes use of the [OPM](https://github.com/openresty/opm) package manager, available in modern OpenResty distributions. The client OPM tools requires that the `resty` command line tool is available in your system's `PATH` environmental variable.
+Dependency installation uses the [OPM](https://github.com/openresty/opm) package manager, available in modern OpenResty distributions, and LuaRocks. The OPM client requires that the `resty` command line tool is available in your system's `PATH` environmental variable.
 
 Note that by default lua-resty-waf runs in SIMULATE mode, to prevent immediately affecting an application; users who wish to enable rule actions must explicitly set the operational mode to ACTIVE.
 
