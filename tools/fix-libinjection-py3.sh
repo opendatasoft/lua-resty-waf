@@ -15,6 +15,14 @@ if [ "${1:-}" == "clean" ]; then
 	exit 0
 fi
 
+# these scripts are run by libinjection's Makefile through their own
+# shebang, which is `#!/usr/bin/env python`. Debian has shipped no
+# `python` binary since python2 was removed, so point them at python3
+# explicitly rather than relying on a python-is-python3 alias being
+# installed on the build host.
+sed -i '1s|^#!/usr/bin/env python$|#!/usr/bin/env python3|' \
+	make_parens.py sqlparse_map.py sqlparse2c.py
+
 # every print statement touched below has a single argument, so
 # wrapping it in parens is valid syntax under both python 2 and 3
 sed -i 's/^\(\s*\)print \(.*\)$/\1print(\2)/' make_parens.py
