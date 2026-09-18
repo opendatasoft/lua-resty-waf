@@ -14,6 +14,9 @@ OPM_LIBS   = hamishforbes/lua-resty-iputils p0pr0ck5/lua-resty-cookie \
 	p0pr0ck5/lua-ffi-libinjection p0pr0ck5/lua-resty-logger-socket
 MAKE_LIBS  = $(C_LIBS) decode
 SO_LIBS    = libac.so libinjection.so libhtmlentities.so libdecode.so
+# vendored, not fetched: lib/resty/waf/util.lua requires it as a bare
+# "util", so it has to sit at the root of the Lua path, not under resty/
+HEKA_UTIL  = util.lua
 RULES      = rules
 ROCK_DEPS  = "lrexlib-pcre 2.7.2-1" lrexlib-pcre2 busted luafilesystem
 
@@ -33,8 +36,9 @@ clean-debug-macro:
 	./tools/debug-macro.sh clean
 
 clean-install: clean-deps
-	cd $(LUA_LIB_DIR) && rm -rf $(RULES) && rm -f $(SO_LIBS) && cd resty/ && \
-		rm -rf $(LIBS)
+	rm -f $(RESTY_BINDIR)/validate-rules
+	cd $(LUA_LIB_DIR) && rm -rf $(RULES) && rm -f $(SO_LIBS) $(HEKA_UTIL) && \
+		cd resty/ && rm -rf $(LIBS)
 
 clean-decode:
 	cd src && make clean
@@ -180,7 +184,9 @@ install-rocks:
 install-link: install-check
 	$(INSTALL_SOFT) $(PWD)/lib/resty/* $(LUA_LIB_DIR)/resty/
 	$(INSTALL_SOFT) $(PWD)/lib/*.so $(LUA_LIB_DIR)
+	$(INSTALL_SOFT) $(PWD)/lib/$(HEKA_UTIL) $(LUA_LIB_DIR)
 	$(INSTALL_SOFT) $(PWD)/rules/ $(LUA_LIB_DIR)
+	$(INSTALL_SOFT) $(PWD)/tools/validate-rules $(RESTY_BINDIR)/
 
 install: install-check install-deps
 	$(INSTALL) -d $(LUA_LIB_DIR)/resty/waf/storage
@@ -189,6 +195,8 @@ install: install-check install-deps
 	$(INSTALL) -m 644 lib/resty/waf/*.lua $(LUA_LIB_DIR)/resty/waf/
 	$(INSTALL) -m 644 lib/resty/waf/storage/*.lua $(LUA_LIB_DIR)/resty/waf/storage/
 	$(INSTALL) -m 644 lib/*.so $(LUA_LIB_DIR)
+	$(INSTALL) -m 644 lib/$(HEKA_UTIL) $(LUA_LIB_DIR)/
 	$(INSTALL) -m 644 rules/*.json $(LUA_LIB_DIR)/rules/
+	$(INSTALL) -m 755 tools/validate-rules $(RESTY_BINDIR)/
 
 install-soft: install-check install-deps install-link

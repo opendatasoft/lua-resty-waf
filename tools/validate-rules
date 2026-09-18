@@ -1,0 +1,253 @@
+#!/usr/bin/env bash
+#
+# Validate the rule JSON that init_by_lua* would load, without starting or
+# signalling nginx.
+#
+# Neither `nginx -t` nor `nginx -s reload` can catch a broken ruleset:
+# lua-nginx-module skips init_by_lua* when the process is testing the
+# configuration or is a signaller (ngx_http_lua_module.c, the
+# `ngx_test_config || NGX_PROCESS_SIGNALLER` guard), and `-s reload` exits
+# 0 as soon as it has sent SIGHUP. The master does refuse the reload --
+# ngx_init_cycle() fails and the old workers keep serving the rules already
+# in memory -- but that is only visible in the error log, so `systemctl
+# reload` reports success either way. Run this before the reload is sent
+# and the failure surfaces where it can stop the deploy (paths below are
+# whatever your unit file already uses; there is no universal prefix):
+#
+#   [Service]
+#   ExecReload=
+#   ExecReload=/path/to/nginx -t -q -g 'daemon on; master_process on;'
+#   ExecReload=/path/to/validate-rules
+#   ExecReload=/path/to/nginx -g 'daemon on; master_process on;' -s reload
+#
+# Exit status: 0 all rulesets are valid, 1 one or more are not, 2 the check
+# itself could not run.
+set -euo pipefail
+
+self=$(basename "$0")
+
+usage() {
+	cat <<EOF
+Usage: ${self} [options]
+
+Loads every ruleset the WAF would load at init_by_lua* time, checks it for
+JSON errors and duplicate rule ids, and prints one line per problem.
+
+Options:
+  -I, --include DIR   prepend DIR to the Lua search path; rule files are
+                      read from DIR/rules/<name>.json (repeatable)
+  -r, --ruleset NAME  validate NAME as well as the distributed rulesets,
+                      e.g. a custom ruleset added to
+                      resty.waf.global_rulesets (repeatable)
+      --no-defaults   validate only the -r rulesets
+      --prefix DIR    OpenResty prefix (default: \$OPENRESTY_PREFIX, else
+                      ${default_prefix} when it exists, else derived from
+                      the resty/openresty/nginx binary on \$PATH)
+      --resty PATH    resty CLI to run the check with
+      --nginx PATH    nginx binary for resty to run
+  -q, --quiet         print nothing when every ruleset is valid
+  -h, --help          this message
+EOF
+}
+
+die() {
+	echo "${self}: $*" >&2
+	exit 2
+}
+
+default_prefix=/usr/local/openresty
+prefix=${OPENRESTY_PREFIX:-}
+resty_bin=
+nginx_bin=
+quiet=
+defaults=1
+includes=()
+rulesets=()
+
+while (( $# )); do
+	case $1 in
+		-I|--include)  [[ ${2:-} ]] || die "$1 needs a directory"
+		               includes+=("$2"); shift 2 ;;
+		-r|--ruleset)  [[ ${2:-} ]] || die "$1 needs a ruleset name"
+		               rulesets+=("$2"); shift 2 ;;
+		--no-defaults) defaults=; shift ;;
+		--prefix)      [[ ${2:-} ]] || die "$1 needs a directory"
+		               prefix=$2; shift 2 ;;
+		--resty)       [[ ${2:-} ]] || die "$1 needs a path"
+		               resty_bin=$2; shift 2 ;;
+		--nginx)       [[ ${2:-} ]] || die "$1 needs a path"
+		               nginx_bin=$2; shift 2 ;;
+		-q|--quiet)    quiet=1; shift ;;
+		-h|--help)     usage; exit 0 ;;
+		*)             usage >&2; die "unknown argument '$1'" ;;
+	esac
+done
+
+if [[ ! $defaults && ${#rulesets[@]} -eq 0 ]]; then
+	die "--no-defaults leaves nothing to validate; name rulesets with -r"
+fi
+
+# Ruleset names end up inside the generated Lua chunk, and are file
+# basenames anyway, so refuse anything that would need quoting.
+for name in ${rulesets[@]+"${rulesets[@]}"}; do
+	[[ $name =~ ^[A-Za-z0-9._-]+$ ]] ||
+		die "ruleset name '${name}' is not a plain file basename"
+done
+
+# /usr/local/openresty is OpenResty's own default prefix and the one this
+# project's Makefile installs into, so it is the default here too. Distro
+# packages and source builds put it elsewhere, so when it is absent and
+# nothing was passed explicitly, work back from whichever binary is on
+# $PATH rather than failing on a path this machine never used.
+if [[ -z $prefix ]]; then
+	if [[ -d $default_prefix ]]; then
+		prefix=$default_prefix
+	elif found=$(command -v resty 2>/dev/null); then
+		# $prefix/bin/resty
+		prefix=$(dirname "$(dirname "$(readlink -f "$found")")")
+	elif found=$(command -v openresty 2>/dev/null ||
+			command -v nginx 2>/dev/null); then
+		# the binary knows where it was configured to live; that is the
+		# nginx prefix, one level below the OpenResty prefix
+		nginx_prefix=$("$found" -V 2>&1 |
+			sed -n 's/.*--prefix=\([^ ]*\).*/\1/p')
+		[[ $nginx_prefix ]] && prefix=$(dirname "$nginx_prefix")
+	fi
+
+	prefix=${prefix:-$default_prefix}
+fi
+
+if [[ -z $resty_bin ]]; then
+	if [[ -x ${prefix}/bin/resty ]]; then
+		resty_bin=${prefix}/bin/resty
+	else
+		resty_bin=$(command -v resty 2>/dev/null) ||
+			die "no resty CLI found under ${prefix}; pass --resty or --prefix"
+	fi
+fi
+[[ -x $resty_bin ]] || die "${resty_bin} is not executable"
+
+if [[ -z $nginx_bin && -x ${prefix}/nginx/sbin/nginx ]]; then
+	nginx_bin=${prefix}/nginx/sbin/nginx
+fi
+
+resty_args=()
+[[ $nginx_bin ]] && resty_args+=(--nginx "$nginx_bin")
+
+# The rule files are found by scanning package.path for a sibling rules/
+# directory (see util.load_ruleset_file), so the search path decides which
+# rules get checked. Caller-supplied directories win, then the prefix the
+# running nginx loads the library from.
+for dir in ${includes[@]+"${includes[@]}"}; do
+	resty_args+=(-I "$dir")
+done
+for dir in "${prefix}/site/lualib" "${prefix}/lualib"; do
+	[[ -d $dir ]] && resty_args+=(-I "$dir")
+done
+
+extra=
+for name in ${rulesets[@]+"${rulesets[@]}"}; do
+	extra="${extra}\"${name}\","
+done
+
+# Everything runs under pcall: a traceback in the journal is exactly what
+# this tool exists to avoid.
+chunk="local extra    = { ${extra} }
+local defaults = ${defaults:-0}
+$(cat <<'EOF'
+local limit    = 200
+
+local function say(kind, msg)
+	-- errors carry the offending payload (parse_ruleset reports the whole
+	-- file it could not decode), so flatten and clip them to one line
+	msg = string.gsub(tostring(msg), "%s+", " ")
+	if #msg > limit then
+		msg = string.sub(msg, 1, limit) .. "..."
+	end
+	print("!!" .. kind .. "\t" .. msg)
+end
+
+local ok, waf = pcall(require, "resty.waf")
+if not ok then
+	local err = tostring(waf)
+
+	say("fatal", "could not load resty.waf: " .. err)
+
+	-- resty/waf/util.lua requires the heka module as a bare "util", so a
+	-- deployment that did not copy lib/util.lua to the root of the Lua
+	-- path fails here, naming a file inside this library rather than the
+	-- one that is actually missing
+	if string.find(err, "module 'util' not found", 1, true) then
+		say("fatal", "'util' is the vendored heka module: make install " ..
+			"copies lib/util.lua next to resty/, or pass its directory " ..
+			"with -I")
+	end
+
+	os.exit(2)
+end
+
+if type(waf.validate) ~= "function" then
+	say("fatal", "the installed lua-resty-waf has no validate(); it " ..
+		"predates this tool")
+	os.exit(2)
+end
+
+local names, names_n = {}, 0
+if defaults ~= 0 then
+	for _, name in ipairs(waf.global_rulesets) do
+		names_n = names_n + 1
+		names[names_n] = name
+	end
+end
+for _, name in ipairs(extra) do
+	names_n = names_n + 1
+	names[names_n] = name
+end
+
+local ok, valid, errors = pcall(waf.validate, names)
+if not ok then
+	say("fatal", "validation failed: " .. tostring(valid))
+	os.exit(2)
+end
+
+if valid then
+	print("!!ok\t" .. names_n)
+	os.exit(0)
+end
+
+for i = 1, #errors do
+	say("err", errors[i])
+end
+os.exit(1)
+EOF
+)"
+
+set +e
+output=$("$resty_bin" ${resty_args[@]+"${resty_args[@]}"} -e "$chunk" 2>&1)
+status=$?
+set -e
+
+markers=$(printf '%s\n' "$output" | grep '^!!' || true)
+
+if [[ -z $markers ]]; then
+	# resty never got as far as our chunk (no nginx, unreadable prefix, a
+	# missing dependency): show what it said rather than swallowing it.
+	[[ $output ]] && printf '%s\n' "$output" >&2
+	die "could not run the check (${resty_bin} exited ${status})"
+fi
+
+rc=0
+while IFS=$'\t' read -r kind msg; do
+	case $kind in
+		'!!ok')    [[ $quiet ]] || echo "${self}: ${msg} ruleset(s) OK" ;;
+		'!!err')   echo "${self}: ${msg}" >&2; rc=1 ;;
+		'!!fatal') echo "${self}: ${msg}" >&2; rc=2 ;;
+	esac
+done <<<"$markers"
+
+if (( rc == 1 )); then
+	echo "${self}: $(grep -c '^!!err' <<<"$markers") invalid ruleset(s); \
+not reloading" >&2
+fi
+
+exit $rc

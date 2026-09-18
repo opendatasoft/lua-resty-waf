@@ -10,11 +10,13 @@ lua-resty-waf - High-performance WAF built on the OpenResty stack
 * [Requirements](#requirements)
 * [Performance](#performance)
 * [Installation](#installation)
+* [Reloading rules](#reloading-rules)
 * [Testing](#testing)
 * [Synopsis](#synopsis)
 * [Public Functions](#public-functions)
 	* [lua-resty-waf.load_secrules()](#lua-resty-wafload_secrules)
 	* [lua-resty-waf.init()](#lua-resty-wafinit)
+	* [lua-resty-waf.validate()](#lua-resty-wafvalidate)
 * [Public Methods](#public-methods)
 	* [lua-resty-waf:new()](#lua-resty-wafnew)
 	* [lua-resty-waf:set_option()](#lua-resty-wafset_option)
@@ -106,6 +108,8 @@ lua-resty-waf depends on several third-party modules that are **not** bundled wi
 
 Note that `lrexlib-pcre2` is required by every deployment, not only by users of `load_secrules()`: `resty.waf` loads `resty.waf.translate` when the module is first required, and that in turn requires `rex_pcre2`. If it is missing, or is installed somewhere outside nginx's `lua_package_cpath`, workers fail at startup with `module 'rex_pcre2' not found`. `make install-deps` copies it into `$OPENRESTY_PREFIX/lualib/` for this reason.
 
+One dependency is not third-party in the same sense: `lib/resty/waf/util.lua` requires a bare `util`, which is Mozilla's heka utility module. An unmodified copy (MPL-2.0) is vendored here as `lib/util.lua`, and `make install` copies it to `$OPENRESTY_PREFIX/site/lualib/util.lua` — the root of the Lua path, because of the name it is required under. Deployments that copy files into place by hand need to carry it over as well; without it, `require "resty.waf"` fails with `module 'util' not found` naming `resty/waf/util.lua`, which reads like a fault in this library rather than a missing file. Note also that the name is generic enough to collide with another `util` module in the same directory.
+
 Modern OpenResty releases bundle a JIT-capable PCRE2 library, which is what lua-resty-waf expects, so no special configure flags are normally needed for regex performance.
 
 ## Performance
@@ -129,6 +133,56 @@ Do not install this fork from LuaRocks: the published `lua-resty-waf` rock is up
 Dependency installation uses the [OPM](https://github.com/openresty/opm) package manager, available in modern OpenResty distributions, and LuaRocks. The OPM client requires that the `resty` command line tool is available in your system's `PATH` environmental variable.
 
 Note that by default lua-resty-waf runs in SIMULATE mode, to prevent immediately affecting an application; users who wish to enable rule actions must explicitly set the operational mode to ACTIVE.
+
+## Reloading rules
+
+`init()` refuses to start with an invalid ruleset: it logs one line per broken file (JSON it cannot parse, a rule id defined twice) and raises. Because `init_by_lua*` runs in the master before the new configuration takes over, that also refuses a reload — `ngx_init_cycle()` fails, the old workers keep serving the rules already in memory, and nothing goes live half-broken.
+
+What it cannot do is tell you. Neither nginx nor systemd will report it:
+
+* lua-nginx-module skips `init_by_lua*` when the process is testing the configuration or is a signaller, so `nginx -t` passes on rule files it never reads;
+* `nginx -s reload` exits 0 as soon as it has sent `SIGHUP`, long before the master decides whether the new configuration is usable, so `ExecReload=` always succeeds.
+
+A refused reload is visible only in the error log:
+
+```
+[error] 1#1: [lua] waf.lua:788: init(): lua-resty-waf: invalid default ruleset - 90000_custom: rule id 90061000 is defined more than once in ruleset 90000_custom
+[error] 1#1: init_by_lua error: lua-resty-waf: refusing to start with 1 invalid default ruleset(s), see error log for details
+```
+
+`systemctl reload` meanwhile reports success, and the broken rules sit on disk until the *next* restart or reboot fails outright. `tools/validate-rules` closes that gap by running the same checks in a separate process, before the signal is sent:
+
+```sh
+# validate-rules
+validate-rules: 9 ruleset(s) OK
+
+# validate-rules
+validate-rules: 90000_custom: rule id 90061000 is defined more than once in ruleset 90000_custom
+validate-rules: 1 invalid ruleset(s); not reloading
+```
+
+It exits 0 when every ruleset is valid, 1 when one is not, and 2 when the check itself could not run. Problems are printed one per line, flattened and clipped, so what reaches the journal is the error rather than a Lua traceback. `make install` places it in `$OPENRESTY_PREFIX/bin`.
+
+Rulesets are found the way nginx finds them, by scanning the Lua search path for a sibling `rules/` directory. Pass `-I` for a directory that is not on the default path, and `-r` for a ruleset your `init_by_lua` block appends to `lua-resty-waf.global_rulesets`:
+
+```sh
+# validate-rules -I /etc/nginx/lua -r 90000_custom
+```
+
+The prefix defaults to `/usr/local/openresty`, which is OpenResty's own default and where `make install` puts the library. Installations that live elsewhere can be named with `--prefix`, `$OPENRESTY_PREFIX`, `--resty` or `--nginx`; when nothing is passed and the default prefix does not exist, it works back from whichever `resty`, `openresty` or `nginx` binary is on `$PATH`, asking that binary for its configured `--prefix`.
+
+Wiring it into the unit file is what makes `systemctl reload` fail instead of quietly keeping the old rules — adjust every path below to your own installation:
+
+```ini
+# /etc/systemd/system/openresty.service.d/override.conf
+[Service]
+ExecReload=
+ExecReload=/usr/local/openresty/nginx/sbin/nginx -t -q -g 'daemon on; master_process on;'
+ExecReload=/usr/local/openresty/bin/validate-rules -q
+ExecReload=/usr/local/openresty/nginx/sbin/nginx -g 'daemon on; master_process on;' -s reload
+```
+
+systemd runs the `ExecReload=` lines in order and fails the job on the first non-zero exit, so nginx is never signalled while broken rules are on disk, and the reason lands in the journal. The empty `ExecReload=` is required: it clears the line inherited from the packaged unit. The same check is worth adding as an `ExecStartPre=`, and better still in whatever deploys the rule files in the first place.
 
 ## Testing
 
@@ -272,6 +326,8 @@ This function can also take a third option as a table to catch translation error
 
 Perform some pre-computation of rules and rulesets, based on what's been made available via the default distributed rulesets. It's recommended, but not required, to call this function (not doing so will result in a small performance penalty). This function should never be called outside this scope.
 
+If a ruleset cannot be parsed, or defines the same rule id twice, `init()` logs each problem and raises: a start fails outright, and a reload is refused while the running master keeps the rules it already holds. See [Reloading rules](#reloading-rules) for why neither `nginx -t` nor `systemctl reload` reports this, and how to check the files beforehand.
+
 *Example*:
 
 ```lua
@@ -282,6 +338,24 @@ http {
         lua_resty_waf.init()
     }
 }
+```
+
+### lua-resty-waf.validate()
+
+Load and check rulesets — by default the same distributed set [init()](#lua-resty-wafinit) reads — reporting problems instead of raising. Returns `true` when every ruleset is valid, or `false` and an array of `<ruleset>: <error>` strings, one per ruleset that could not be parsed or that defines a rule id already seen in this call. `init()` is a thin wrapper around it; `tools/validate-rules` calls it from a standalone process to check rule files before a reload is signalled.
+
+*Example*:
+
+```lua
+local lua_resty_waf = require "resty.waf"
+
+local ok, errors = lua_resty_waf.validate({"90000_custom"})
+
+if not ok then
+    for i = 1, #errors do
+        ngx.log(ngx.ERR, errors[i])
+    end
+end
 ```
 
 ## Public Methods

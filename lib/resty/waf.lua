@@ -751,18 +751,23 @@ function _M.set_option(self, option, value, data)
 	end
 end
 
--- init_by_lua handler precomputations
-function _M.init()
-	-- do offset jump calculations for default rulesets
+-- load, validate and precompute jump offsets for the given rulesets,
+-- defaulting to the distributed set. rulesets that load cleanly are
+-- registered in _ruleset_defs; the rest are collected and returned as an
+-- array of "<ruleset>: <error>" strings alongside a false first return.
+-- unlike init() this reports rather than raises, so it can be called from
+-- a standalone process (see tools/validate-rules) to check rule files
+-- before a reload is signalled
+function _M.validate(rulesets)
 	-- this is also lazily handled in exec() for rulesets
 	-- that dont appear here
 	local errors, errors_n = {}, 0
 
-	-- one registry shared across all default rulesets, so a rule id
-	-- reused between any two of them is caught
+	-- one registry shared across all the rulesets in this call, so a rule
+	-- id reused between any two of them is caught
 	local id_registry = {}
 
-	for _, ruleset in ipairs(_global_rulesets) do
+	for _, ruleset in ipairs(rulesets or _global_rulesets) do
 		local rs, err
 
 		rs, err = util.load_ruleset_file(ruleset)
@@ -783,16 +788,26 @@ function _M.init()
 		end
 	end
 
-	if errors_n > 0 then
-		for i = 1, errors_n do
+	return errors_n == 0, errors
+end
+
+-- init_by_lua handler precomputations
+function _M.init()
+	local ok, errors = _M.validate()
+
+	if not ok then
+		for i = 1, #errors do
 			ngx.log(ngx.ERR, "lua-resty-waf: invalid default ruleset - ", errors[i])
 		end
 
 		-- init_by_lua* runs in the new master before it takes over from
 		-- the old one, so an uncaught error here fails the reload and
 		-- keeps the old master running, instead of going live and then
-		-- 500ing every request once exec() tries to load the same ruleset
-		error("lua-resty-waf: refusing to start with " .. errors_n ..
+		-- 500ing every request once exec() tries to load the same ruleset.
+		-- note that neither `nginx -t` nor `nginx -s reload` can report
+		-- this: both skip init_by_lua* entirely, so a refused reload is
+		-- only visible in the error log
+		error("lua-resty-waf: refusing to start with " .. #errors ..
 			" invalid default ruleset(s), see error log for details", 0)
 	end
 end
