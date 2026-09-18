@@ -452,6 +452,19 @@ location / {
 }
 ```
 
+Each element of the entry's `alerts` array describes one rule match:
+
+| Key | Value |
+| --- | --- |
+| `id` | the id of the rule that matched |
+| `match` | the data the operator matched on |
+| `match_var` | the value of the collection element that matched |
+| `match_var_name` | the type of the collection that matched, e.g. `REQUEST_ARGS` |
+| `match_var_key` | the name of the collection element that matched, e.g. the argument name |
+| `msg`, `logdata` | the rule's `msg` and `logdata`, when set |
+
+`match_var_key` is best-effort. It is left out of the alert entirely when the matching element has no source key to report: `keys` parses, where the element is itself the key, unconditional vars, and `length` vars. For a JSON request body it is the flattened path under which the value was unpacked into `REQUEST_ARGS`, such as `params.arguments.html`, which is also the name to use in a rule's `ignore` directive. When the rule sets `opts.transform`, `match_var` holds the transformed value while `match_var_key` still names the original element.
+
 ## Options
 
 ### add_ruleset

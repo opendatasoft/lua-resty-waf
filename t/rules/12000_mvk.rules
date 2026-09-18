@@ -1,0 +1,2 @@
+# a rule to sieve with the key the event log reports as match_var_key
+SecRule ARGS "<p>" "id:12011,phase:2,msg:'mvk sieve',deny"

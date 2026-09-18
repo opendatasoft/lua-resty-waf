@@ -139,13 +139,17 @@ end
 -- all event logs will be written out at the completion of the transaction if either:
 -- 1. the transaction was altered (e.g. a rule matched with an ACCEPT or DENY action), or
 -- 2. the event_log_altered_only option is unset
-local function _log_event(self, rule, value, ctx, match_var, match_var_name)
+local function _log_event(self, rule, value, ctx, match_var, match_var_name, match_var_key)
 	local t = {
 		id    = rule.id,
 		match = value,
 		match_var = match_var,
 		match_var_name= match_var_name,
 	}
+
+	if match_var_key ~= nil then
+		t.match_var_key = tostring(match_var_key)
+	end
 
 	if rule.msg then
 		t.msg = util.parse_dynamic_value(self, rule.msg, ctx.collections)
@@ -230,6 +234,7 @@ local function _do_transform(self, collection, transform)
 		-- if the collection is a table, loop through it and add the values to the tmp table
 		-- otherwise, this returns directly to _process_rule or a recursed call from multiple transforms
 		if type(collection) == "table" then
+			-- rebuild by index: origin keys are positional and must stay aligned
 			for k, v in pairs(collection) do
 				t[k] = _do_transform(self, collection[k], transform)
 			end
@@ -248,13 +253,13 @@ local function _build_collection(self, rule, var, collections, ctx, opts)
 	end
 
 	local collection_key = var.collection_key
-	local collection
+	local collection, origin_keys
 
 	--_LOG_"Checking for collection_key " .. collection_key
 
 	if not var.storage and not ctx.transform_key[collection_key] then
 		--_LOG_"Collection cache miss"
-		collection = _parse_collection(self, collections[var.type], var)
+		collection, origin_keys = _parse_collection(self, collections[var.type], var)
 
 		if opts.transform then
 			collection = _do_transform(self, collection, opts.transform)
@@ -262,12 +267,14 @@ local function _build_collection(self, rule, var, collections, ctx, opts)
 
 		ctx.transform[collection_key]     = collection
 		ctx.transform_key[collection_key] = true
+		ctx.origin_keys[collection_key]   = origin_keys
 	elseif var.storage then
 		--_LOG_"Forcing cache miss"
-		collection = _parse_collection(self, collections[var.type], var)
+		collection, origin_keys = _parse_collection(self, collections[var.type], var)
 	else
 		--_LOG_"Collection cache hit!"
-		collection = ctx.transform[collection_key]
+		collection  = ctx.transform[collection_key]
+		origin_keys = ctx.origin_keys[collection_key]
 	end
 
 	if var.length then
@@ -278,9 +285,11 @@ local function _build_collection(self, rule, var, collections, ctx, opts)
 		else
 			collection = 0
 		end
+
+		origin_keys = nil
 	end
 
-	return collection
+	return collection, origin_keys
 end
 
 -- process an individual rule
@@ -302,7 +311,7 @@ local function _process_rule(self, rule, collections, ctx)
 			var = rule.vars[k]
 		end
 
-		local collection = _build_collection(self, rule, var, collections, ctx, opts)
+		local collection, origin_keys = _build_collection(self, rule, var, collections, ctx, opts)
 
 		if not collection then
 			--_LOG_"No values for this collection"
@@ -313,13 +322,13 @@ local function _process_rule(self, rule, collections, ctx)
 				pattern = util.parse_dynamic_value(self, pattern, collections)
 			end
 
-			local match, value, match_var
+			local match, value, match_var, match_idx
 
 			if var.unconditional then
 				match = true
 				value = 1
 			else
-				match, value, match_var = operators.lookup[rule.operator](self, collection, pattern, ctx)
+				match, value, match_var, match_idx = operators.lookup[rule.operator](self, collection, pattern, ctx)
 			end
 
 			if rule.op_negated then
@@ -361,8 +370,16 @@ local function _process_rule(self, rule, collections, ctx)
 
 				-- log the event
 				if rule.actions.disrupt ~= "CHAIN" and not opts.nolog then
+					local match_var_key
 
-					_log_event(self, rule, value, ctx, match_var, collections.MATCHED_VAR_NAME)
+					if origin_keys and match_idx then
+						match_var_key = origin_keys[match_idx]
+					elseif var.parse and var.parse[1] == "specific" then
+						match_var_key = var.parse[2]
+					end
+
+					_log_event(self, rule, value, ctx, match_var,
+						collections.MATCHED_VAR_NAME, match_var_key)
 				end
 
 				-- wrapper for the rules action
@@ -487,7 +504,7 @@ function _M.exec(self, opts)
 		logger.fatal_fail("lua-resty-waf should not be run in phase " .. phase)
 	end
 
-	local ctx         = ngx.ctx.lua_resty_waf or tab_new(0, 20)
+	local ctx         = ngx.ctx.lua_resty_waf or tab_new(0, 21)
 	local collections = ctx.collections or tab_new(0, 41)
 
 	ctx.lrw_initted   = true
@@ -497,6 +514,7 @@ function _M.exec(self, opts)
 	ctx.storage       = ctx.storage or {}
 	ctx.transform     = ctx.transform or {}
 	ctx.transform_key = ctx.transform_key or {}
+	ctx.origin_keys   = ctx.origin_keys or {}
 	ctx.t_header_set  = ctx.t_header_set or false
 	ctx.phase         = phase
 	ctx.match_n       = ctx.match_n or 0

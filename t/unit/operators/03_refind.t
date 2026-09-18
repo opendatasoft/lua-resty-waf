@@ -182,3 +182,41 @@ number
 --- no_error_log
 [error]
 
+
+=== TEST 8: Matched index (table)
+--- http_config eval: $::HttpConfig
+--- config
+    location = /t {
+        content_by_lua_block {
+			local op = require "resty.waf.operators"
+			local match, value, reason, idx = op.refind({ _pcre_flags = "" },
+				{ "99-99-99", "88-88-88", "hello, 1234" }, "([a-z])[a-z]+")
+			ngx.say(idx)
+		}
+	}
+--- request
+GET /t
+--- error_code: 200
+--- response_body
+3
+--- no_error_log
+[error]
+
+=== TEST 9: Matched index is nil for a scalar subject
+--- http_config eval: $::HttpConfig
+--- config
+    location = /t {
+        content_by_lua_block {
+			local op = require "resty.waf.operators"
+			local match, value, reason, idx = op.refind({ _pcre_flags = "" },
+				"hello, 1234", "([a-z])[a-z]+")
+			ngx.say(tostring(idx))
+		}
+	}
+--- request
+GET /t
+--- error_code: 200
+--- response_body
+nil
+--- no_error_log
+[error]

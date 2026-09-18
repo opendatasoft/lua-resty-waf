@@ -255,3 +255,156 @@ bar
 bat
 --- no_error_log
 [error]
+
+=== TEST 11: All (key/value layout is unchanged)
+--- http_config eval: $::HttpConfig
+--- config
+	location /t {
+		content_by_lua_block {
+			local lookup     = require "resty.waf.util"
+			local collection = ngx.req.get_uri_args()
+			local all        = lookup.parse_collection["all"]({}, collection)
+
+			-- the keys come first, then the values; within each half the
+			-- order is pairs() order, so sort before comparing
+			local n = 0
+			for _ in pairs(collection) do n = n + 1 end
+
+			local keys, values = {}, {}
+			for i = 1, n do keys[i] = all[i] end
+			for i = n + 1, #all do values[#values + 1] = all[i] end
+
+			table.sort(keys)
+			table.sort(values)
+
+			ngx.say(table.concat(keys, ","))
+			ngx.say(table.concat(values, ","))
+		}
+	}
+--- request
+GET /t?foo=bar&baz=qux
+--- error_code: 200
+--- response_body
+baz,foo
+bar,qux
+--- no_error_log
+[error]
+
+=== TEST 12: All (origin keys)
+--- http_config eval: $::HttpConfig
+--- config
+	location /t {
+		content_by_lua_block {
+			local lookup            = require "resty.waf.util"
+			local collection        = ngx.req.get_uri_args()
+			local all, origin_keys  = lookup.parse_collection["all"]({}, collection)
+
+			local t = {}
+			for i = 1, #all do t[i] = all[i] .. ":" .. origin_keys[i] end
+			table.sort(t)
+
+			ngx.say(table.concat(t, " "))
+		}
+	}
+--- request
+GET /t?foo=bar&baz=qux
+--- error_code: 200
+--- response_body
+bar:foo baz:baz foo:foo qux:baz
+--- no_error_log
+[error]
+
+=== TEST 13: All (origin keys, repeated argument)
+--- http_config eval: $::HttpConfig
+--- config
+	location /t {
+		content_by_lua_block {
+			local lookup           = require "resty.waf.util"
+			local collection       = ngx.req.get_uri_args()
+			local all, origin_keys = lookup.parse_collection["all"]({}, collection)
+
+			local t = {}
+			for i = 1, #all do t[i] = all[i] .. ":" .. origin_keys[i] end
+			table.sort(t)
+
+			ngx.say(table.concat(t, " "))
+		}
+	}
+--- request
+GET /t?foo=bar&foo=bat&baz=qux
+--- error_code: 200
+--- response_body
+bar:foo bat:foo baz:baz foo:foo qux:baz
+--- no_error_log
+[error]
+
+=== TEST 14: Values (origin keys, repeated argument)
+--- http_config eval: $::HttpConfig
+--- config
+	location /t {
+		content_by_lua_block {
+			local lookup              = require "resty.waf.util"
+			local collection          = ngx.req.get_uri_args()
+			local values, origin_keys = lookup.parse_collection["values"]({}, collection)
+
+			local t = {}
+			for i = 1, #values do t[i] = values[i] .. ":" .. origin_keys[i] end
+			table.sort(t)
+
+			ngx.say(table.concat(t, " "))
+		}
+	}
+--- request
+GET /t?foo=bar&foo=bat&baz=qux
+--- error_code: 200
+--- response_body
+bar:foo bat:foo qux:baz
+--- no_error_log
+[error]
+
+=== TEST 15: Regex (origin keys)
+--- http_config eval: $::HttpConfig
+--- config
+	location /t {
+		content_by_lua_block {
+			local lookup              = require "resty.waf.util"
+			local collection          = ngx.req.get_uri_args()
+			local values, origin_keys = lookup.parse_collection["regex"]({ _pcre_flags = "joi" }, collection, [=[^f]=])
+
+			local t = {}
+			for i = 1, #values do t[i] = values[i] .. ":" .. origin_keys[i] end
+			table.sort(t)
+
+			ngx.say(table.concat(t, " "))
+		}
+	}
+--- request
+GET /t?foo=bar&foo=bat&baz=qux
+--- error_code: 200
+--- response_body
+bar:foo bat:foo
+--- no_error_log
+[error]
+
+=== TEST 16: Keys and specific report no origin keys
+--- http_config eval: $::HttpConfig
+--- config
+	location /t {
+		content_by_lua_block {
+			local lookup     = require "resty.waf.util"
+			local collection = ngx.req.get_uri_args()
+			local _, keys_origin     = lookup.parse_collection["keys"]({}, collection)
+			local _, specific_origin = lookup.parse_collection["specific"]({}, collection, "foo")
+
+			ngx.say(tostring(keys_origin))
+			ngx.say(tostring(specific_origin))
+		}
+	}
+--- request
+GET /t?foo=bar&baz=qux
+--- error_code: 200
+--- response_body
+nil
+nil
+--- no_error_log
+[error]

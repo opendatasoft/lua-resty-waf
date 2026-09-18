@@ -1,0 +1,22 @@
+{
+	"access": [
+		{
+			"actions": { "disrupt": "DENY" },
+			"id": "12001",
+			"msg": "mvk value match",
+			"operator": "REFIND",
+			"pattern": "<p>",
+			"vars": [{ "parse": ["all", 1], "type": "REQUEST_ARGS" }]
+		},
+		{
+			"actions": { "disrupt": "DENY" },
+			"id": "12002",
+			"msg": "mvk keys parse",
+			"operator": "REFIND",
+			"pattern": "^attackkey$",
+			"vars": [{ "parse": ["keys", 1], "type": "REQUEST_ARGS" }]
+		}
+	],
+	"body_filter": [],
+	"header_filter": []
+}

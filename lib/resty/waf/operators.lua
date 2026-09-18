@@ -26,12 +26,13 @@ function _M.equals(a, b)
 	-- must not default to `a`: for an empty-table `a` (e.g. a transformed
 	-- absent header), the loop below never runs, and an empty table is
 	-- truthy, so a bare `= a` initializer would report a false match
-	local equals, value, reason
+	local equals, value, reason, idx
 	if type(a) == "table" then
-		for _, v in ipairs(a) do
+		for i, v in ipairs(a) do
 			equals, value = _M.equals(v, b)
 			if equals then
 				reason = v
+				idx    = i
 				break
 			end
 		end
@@ -43,18 +44,19 @@ function _M.equals(a, b)
 		end
 	end
 
-	return equals, value, reason
+	return equals, value, reason, idx
 end
 
 function _M.greater(a, b)
 	-- see the comment in _M.equals about not defaulting to `a`
-	local greater, value, reason
+	local greater, value, reason, idx
 
 	if type(a) == "table" then
-		for _, v in ipairs(a) do
+		for i, v in ipairs(a) do
 			greater, value = _M.greater(v, b)
 			if greater then
 				reason = v
+				idx    = i
 				break
 			end
 		end
@@ -66,18 +68,19 @@ function _M.greater(a, b)
 		end
 	end
 
-	return greater, value, reason
+	return greater, value, reason, idx
 end
 
 function _M.less(a, b)
 	-- see the comment in _M.equals about not defaulting to `a`
-	local less, value, reason
+	local less, value, reason, idx
 
 	if type(a) == "table" then
-		for _, v in ipairs(a) do
+		for i, v in ipairs(a) do
 			less, value = _M.less(v, b)
 			if less then
 				reason = v
+				idx    = i
 				break
 			end
 		end
@@ -89,18 +92,19 @@ function _M.less(a, b)
 		end
 	end
 
-	return less, value, reason
+	return less, value, reason, idx
 end
 
 function _M.greater_equals(a, b)
 	-- see the comment in _M.equals about not defaulting to `a`
-	local greater_equals, value, reason
+	local greater_equals, value, reason, idx
 
 	if type(a) == "table" then
-		for _, v in ipairs(a) do
+		for i, v in ipairs(a) do
 			greater_equals, value = _M.greater_equals(v, b)
 			if greater_equals then
 				reason = v
+				idx    = i
 				break
 			end
 		end
@@ -112,18 +116,19 @@ function _M.greater_equals(a, b)
 		end
 	end
 
-	return greater_equals, value, reason
+	return greater_equals, value, reason, idx
 end
 
 function _M.less_equals(a, b)
 	-- see the comment in _M.equals about not defaulting to `a`
-	local less_equals, value, reason
+	local less_equals, value, reason, idx
 
 	if type(a) == "table" then
-		for _, v in ipairs(a) do
+		for i, v in ipairs(a) do
 			less_equals, value = _M.less_equals(v, b)
 			if less_equals then
 				reason = v
+				idx    = i
 				break
 			end
 		end
@@ -135,19 +140,20 @@ function _M.less_equals(a, b)
 		end
 	end
 
-	return less_equals, value, reason
+	return less_equals, value, reason, idx
 end
 
 function _M.exists(needle, haystack)
 	-- see the comment in _M.equals about not defaulting to `a`
-	local exists, value, reason
+	local exists, value, reason, idx
 
 	if type(needle) == "table" then
-		for _, v in ipairs(needle) do
+		for i, v in ipairs(needle) do
 			exists, value = _M.exists(v, haystack)
 
 			if exists then
 				reason = v
+				idx    = i
 				break
 			end
 		end
@@ -159,7 +165,7 @@ function _M.exists(needle, haystack)
 		end
 	end
 
-	return exists, value, reason
+	return exists, value, reason, idx
 end
 
 function _M.contains(haystack, needle)
@@ -187,14 +193,15 @@ function _M.contains(haystack, needle)
 end
 
 function _M.str_find(waf, subject, pattern)
-	local from, to, match, value, reason = subject
+	local from, to, match, value, reason, idx = subject
 
 	if type(subject) == "table" then
-		for _, v in ipairs(subject) do
+		for i, v in ipairs(subject) do
 			match, value = _M.str_find(waf, v, pattern)
 
 			if match then
 				reason = v
+				idx    = i
 				break
 			end
 		end
@@ -207,19 +214,20 @@ function _M.str_find(waf, subject, pattern)
 		end
 	end
 
-	return match, value, reason
+	return match, value, reason, idx
 end
 
 function _M.regex(waf, subject, pattern)
 	local opts = waf._pcre_flags
-	local captures, err, match, reason = subject
+	local captures, err, match, reason, idx = subject
 
 	if type(subject) == "table" then
-		for _, v in ipairs(subject) do
+		for i, v in ipairs(subject) do
 			match, captures = _M.regex(waf, v, pattern)
 
 			if match then
 				reason = v
+				idx    = i
 				break
 			end
 		end
@@ -235,19 +243,20 @@ function _M.regex(waf, subject, pattern)
 		end
 	end
 
-	return match, captures, reason
+	return match, captures, reason, idx
 end
 
 function _M.refind(waf, subject, pattern)
 	local opts = waf._pcre_flags
-	local from, to, err, match, reason = subject
+	local from, to, err, match, reason, idx = subject
 
 	if type(subject) == "table" then
-		for _, v in ipairs(subject) do
+		for i, v in ipairs(subject) do
 			match, from = _M.refind(waf, v, pattern)
 
 			if match then
 				reason = v
+				idx    = i
 				break
 			end
 		end
@@ -263,12 +272,12 @@ function _M.refind(waf, subject, pattern)
 		end
 	end
 
-	return match, from, reason
+	return match, from, reason, idx
 end
 
 function _M.ac_lookup(needle, haystack, ctx)
 	local id = ctx.id
-	local match, _ac, value, reason = needle
+	local match, _ac, value, reason, idx = needle
 
 	-- dictionary creation is expensive, so we use the id of
 	-- the rule as the key to cache the created dictionary
@@ -280,11 +289,12 @@ function _M.ac_lookup(needle, haystack, ctx)
 	end
 
 	if type(needle) == "table" then
-		for _, v in ipairs(needle) do
+		for i, v in ipairs(needle) do
 			match, value = _M.ac_lookup(v, haystack, ctx)
 
 			if match then
 				reason = v
+				idx    = i
 				break
 			end
 		end
@@ -297,7 +307,7 @@ function _M.ac_lookup(needle, haystack, ctx)
 		end
 	end
 
-	return match, value, reason
+	return match, value, reason, idx
 end
 
 function _M.cidr_match(ip, cidr_pattern)
@@ -384,12 +394,12 @@ end
 function _M.detect_sqli(input)
 	local reason = input
 	if type(input) == 'table' then
-		for _, v in ipairs(input) do
+		for i, v in ipairs(input) do
 			local match, value = _M.detect_sqli(v)
 
 			if match then
 				reason = v
-				return match, value, reason
+				return match, value, reason, i
 			end
 		end
 	else
@@ -404,12 +414,12 @@ end
 function _M.detect_xss(input)
 	local reason = input
 	if type(input) == 'table' then
-		for _, v in ipairs(input) do
+		for i, v in ipairs(input) do
 			local match, value = _M.detect_xss(v)
 
 			if match then
 				reason = v
-				return match, value, reason
+				return match, value, reason, i
 			end
 		end
 	else
@@ -428,12 +438,12 @@ end
 function _M.str_match(input, pattern)
 	local reason = input
 	if type(input) == 'table' then
-		for _, v in ipairs(input) do
+		for i, v in ipairs(input) do
 			local match, value = _M.str_match(v, pattern)
 
 			if match then
 				reason = v
-				return match, value, reason
+				return match, value, reason, i
 			end
 		end
 	else
@@ -470,15 +480,16 @@ function _M.str_match(input, pattern)
 end
 
 function _M.verify_cc(waf, input, pattern)
-	local match, value, reason = input
+	local match, value, reason, idx = input
 	match = false
 
 	if type(input) == 'table' then
-		for _, v in pairs(input) do
+		for i, v in pairs(input) do
 			match, value = _M.verify_cc(waf, v, pattern)
 
 			if match then
 				reason = v
+				idx    = i
 				break
 			end
 		end
@@ -519,7 +530,7 @@ function _M.verify_cc(waf, input, pattern)
 		end
 	end
 
-	return match, value, reason
+	return match, value, reason, idx
 end
 
 _M.lookup = {
@@ -532,7 +543,12 @@ _M.lookup = {
 	LESS_EQ      = function(waf, collection, pattern) return _M.less_equals(collection, pattern) end,
 	EXISTS       = function(waf, collection, pattern) return _M.exists(collection, pattern) end,
 	CONTAINS     = function(waf, collection, pattern) return _M.contains(collection, pattern) end,
-	STR_EXISTS   = function(waf, collection, pattern) return _M.str_find(waf, pattern, collection) end,
+	-- arguments are swapped here: str_find walks the pattern, so its index
+	-- is not an index into the collection
+	STR_EXISTS   = function(waf, collection, pattern)
+		local match, value, reason = _M.str_find(waf, pattern, collection)
+		return match, value, reason
+	end,
 	STR_CONTAINS = function(waf, collection, pattern) return _M.str_find(waf, collection, pattern) end,
 	PM           = function(waf, collection, pattern, ctx) return _M.ac_lookup(collection, pattern, ctx) end,
 	CIDR_MATCH   = function(waf, collection, pattern) return _M.cidr_match(collection, pattern) end,

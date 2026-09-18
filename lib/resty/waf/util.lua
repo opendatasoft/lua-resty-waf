@@ -326,6 +326,9 @@ function _M.build_rbl_query(ip, rbl_srv)
 end
 
 -- parse collection elements based on a given directive
+-- handlers return the parsed collection and, where its elements can be
+-- attributed to a source key, a parallel array where origin_keys[i] names
+-- collection[i]. handlers that cannot attribute an element return nil.
 _M.parse_collection = {
 	specific = function(waf, collection, value)
 		--_LOG_"Parse collection is getting a specific value: " .. value
@@ -336,6 +339,7 @@ _M.parse_collection = {
 		local v
 		local n = 0
 		local _collection = {}
+		local origin_keys = {}
 		for k, _ in pairs(collection) do
 			--_LOG_"checking " .. k
 			if ngx.re.find(k, value, waf._pcre_flags) then
@@ -344,14 +348,16 @@ _M.parse_collection = {
 					for __, _v in pairs(v) do
 						n = n + 1
 						_collection[n] = _v
+						origin_keys[n] = k
 					end
 				else
 					n = n + 1
 					_collection[n] = v
+					origin_keys[n] = k
 				end
 			end
 		end
-		return _collection
+		return _collection, origin_keys
 	end,
 	keys = function(waf, collection)
 		--_LOG_"Parse collection is getting the keys"
@@ -359,20 +365,64 @@ _M.parse_collection = {
 	end,
 	values = function(waf, collection)
 		--_LOG_"Parse collection is getting the values"
-		return _M.table_values(collection)
-	end,
-	all = function(waf, collection)
 		local n = 0
 		local _collection = {}
-		for _, key in ipairs(_M.table_keys(collection)) do
+		local origin_keys = {}
+
+		for k, v in pairs(collection) do
+			local key = tostring(k)
+
+			-- repeated args arrive as a table of values, e.g. ?foo=bar&foo=bar2
+			if type(v) == "table" then
+				for _, _v in pairs(v) do
+					n = n + 1
+					_collection[n] = tostring(_v)
+					origin_keys[n] = key
+				end
+			else
+				n = n + 1
+				_collection[n] = tostring(v)
+				origin_keys[n] = key
+			end
+		end
+
+		return _collection, origin_keys
+	end,
+	all = function(waf, collection)
+		local n, m = 0, 0
+		local _collection = {}
+		local origin_keys = {}
+		local values, value_keys = {}, {}
+
+		-- one pass, but emitted keys first and values second, as callers
+		-- have always seen it
+		for k, v in pairs(collection) do
+			local key = tostring(k)
+
 			n = n + 1
 			_collection[n] = key
+			origin_keys[n] = key
+
+			if type(v) == "table" then
+				for _, _v in pairs(v) do
+					m = m + 1
+					values[m] = tostring(_v)
+					value_keys[m] = key
+				end
+			else
+				m = m + 1
+				values[m] = tostring(v)
+				value_keys[m] = key
+			end
 		end
-		for _, value in ipairs(_M.table_values(collection)) do
+
+		for i = 1, m do
 			n = n + 1
-			_collection[n] = value
+			_collection[n] = values[i]
+			origin_keys[n] = value_keys[i]
 		end
-		return _collection
+
+		return _collection, origin_keys
 	end
 }
 
