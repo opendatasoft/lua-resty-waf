@@ -216,18 +216,30 @@ end
 -- a chain's non-head links, which legitimately repeat the chain head's
 -- id (see rule_calc._M.calculate, which threads a chain via consecutive
 -- rules where every link but the last has actions.disrupt == "CHAIN")
+--
+-- a rule with no id at all is not an error: ModSecurity does not require
+-- one, so SecRule-translated rulesets carry id-less rules through, and
+-- such a rule cannot be the target of an id lookup in the first place.
+-- it is only reported, and left out of the registry (indexing it would
+-- raise "table index is nil")
 function _M.check_duplicate_ids(name, ruleset, registry)
 	local errors, errors_n = {}, 0
+	local missing, missing_n = {}, 0
 
 	for phase, rules in pairs(ruleset) do
 		local prev_rule
 
-		for _, rule in ipairs(rules) do
+		for offset, rule in ipairs(rules) do
 			local id = rule.id
 			local is_chain_link = prev_rule and prev_rule.id == id and
 				prev_rule.actions and prev_rule.actions.disrupt == "CHAIN"
 
-			if not is_chain_link then
+			if is_chain_link then
+				-- nothing to register; the chain head already did
+			elseif id == nil then
+				missing_n = missing_n + 1
+				missing[missing_n] = phase .. " offset " .. offset
+			else
 				local seen_in = registry[id]
 
 				if seen_in == name then
@@ -245,6 +257,12 @@ function _M.check_duplicate_ids(name, ruleset, registry)
 
 			prev_rule = rule
 		end
+	end
+
+	if missing_n > 0 then
+		ngx.log(ngx.WARN, "lua-resty-waf: ", missing_n, " rule(s) in ruleset ",
+			name, " have no id and cannot be referenced by ignore_rule, ",
+			"sieve_rule or skip_after (", table_concat(missing, ", "), ")")
 	end
 
 	if errors_n > 0 then

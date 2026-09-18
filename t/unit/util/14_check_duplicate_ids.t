@@ -130,3 +130,56 @@ true
 nil
 --- no_error_log
 [error]
+
+=== TEST 5: A rule with no id is reported but does not fail the check
+--- http_config eval: $::HttpConfig
+--- config
+    location = /t {
+        content_by_lua_block {
+			local util = require "resty.waf.util"
+			local registry = {}
+
+			local rs = { access = { { id = 5001 }, {}, { id = 5002 } } }
+
+			local ok, err = util.check_duplicate_ids("noid", rs, registry)
+
+			ngx.say(ok)
+			ngx.say(err)
+		}
+	}
+--- request
+GET /t
+--- error_code: 200
+--- response_body
+true
+nil
+--- error_log
+lua-resty-waf: 1 rule(s) in ruleset noid have no id and cannot be referenced by ignore_rule, sieve_rule or skip_after (access offset 2)
+
+=== TEST 6: An id-less chain is reported once, not per link
+--- http_config eval: $::HttpConfig
+--- config
+    location = /t {
+        content_by_lua_block {
+			local util = require "resty.waf.util"
+			local registry = {}
+
+			local rs = { access = {
+				{ actions = { disrupt = "CHAIN" } },
+				{ actions = { disrupt = "DENY" } },
+			} }
+
+			local ok, err = util.check_duplicate_ids("noid_chain", rs, registry)
+
+			ngx.say(ok)
+			ngx.say(err)
+		}
+	}
+--- request
+GET /t
+--- error_code: 200
+--- response_body
+true
+nil
+--- error_log
+lua-resty-waf: 1 rule(s) in ruleset noid_chain have no id and cannot be referenced by ignore_rule, sieve_rule or skip_after (access offset 1)
