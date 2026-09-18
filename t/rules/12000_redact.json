@@ -1,0 +1,14 @@
+{
+	"access": [],
+	"header_filter": [
+		{
+			"actions": {},
+			"id": "12021",
+			"msg": "redact header check",
+			"operator": "REFIND",
+			"pattern": "^0123456789abcdef$",
+			"vars": [{ "parse": ["specific", "x-api-key"], "type": "REQUEST_HEADERS" }]
+		}
+	],
+	"body_filter": []
+}

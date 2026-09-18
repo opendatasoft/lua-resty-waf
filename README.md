@@ -37,6 +37,7 @@ lua-resty-waf - High-performance WAF built on the OpenResty stack
 	* [event_log_level](#event_log_level)
 	* [event_log_ngx_vars](#event_log_ngx_vars)
 	* [event_log_periodic_flush](#event_log_periodic_flush)
+	* [event_log_redacted_headers](#event_log_redacted_headers)
 	* [event_log_request_arguments](#event_log_request_arguments)
 	* [event_log_request_body](#event_log_request_body)
 	* [event_log_request_headers](#event_log_request_headers)
@@ -728,6 +729,37 @@ location / {
         -- flush the event log buffer every 30 seconds
         waf:set_option("event_log_periodic_flush", 30)
     }
+}
+```
+
+### event_log_redacted_headers
+
+*Default*: none
+
+Names the request headers whose value is truncated to its first 8 characters in the log entry. Names are matched case-insensitively, as nginx reports header names lowercased. A prefix is kept rather than removing the value outright so that requests from the same client can still be correlated.
+
+This has effect only when `event_log_request_headers` is set; it does not enable header logging by itself. It also does not change what rules see: redaction happens when the entry is written, and the matching engine always reads the true value. A header sent more than once arrives as a table of values, and is logged unredacted.
+
+*Example*:
+
+```lua
+location / {
+    access_by_lua_block {
+        waf:set_option("event_log_request_headers", true)
+        waf:set_option("event_log_redacted_headers", { "authorization", "cookie" })
+    }
+}
+```
+
+The `request_headers` item of the resulting event then reads:
+
+```json
+{
+"request_headers": {
+    "accept": "*/*",
+    "authorization": "Bearer e",
+    "user-agent": "curl/7.22.0"
+}
 }
 ```
 

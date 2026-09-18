@@ -44,6 +44,10 @@ _M.lookup = {
 	event_log_ngx_vars = function(waf, value)
 		waf._event_log_ngx_vars[value] = true
 	end,
+	event_log_redacted_headers = function(waf, value)
+		-- request headers arrive lowercased from ngx.req.get_headers()
+		waf._event_log_redacted_headers[string.lower(value)] = true
+	end,
 	nameservers = function(waf, value)
 		waf._nameservers[#waf._nameservers + 1] = value
 	end,

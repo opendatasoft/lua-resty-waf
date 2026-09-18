@@ -16,6 +16,7 @@ local util          = require "resty.waf.util"
 local table_insert = table.insert
 local table_sort   = table.sort
 local string_lower = string.lower
+local string_sub   = string.sub
 
 local ngx_INFO = ngx.INFO
 local ngx_HTTP_FORBIDDEN = ngx.HTTP_FORBIDDEN
@@ -659,6 +660,7 @@ function _M.new()
 		_event_log_level             = ngx_INFO,
 		_event_log_ngx_vars          = {},
 		_event_log_periodic_flush    = nil,
+		_event_log_redacted_headers  = {},
 		_event_log_request_arguments = false,
 		_event_log_request_body      = false,
 		_event_log_request_headers   = false,
@@ -1023,7 +1025,20 @@ function _M.write_log_events(self, has_ctx, ctx)
 	end
 
 	if self._event_log_request_headers then
-		entry.request_headers = ctx.collections["REQUEST_HEADERS"]
+		local headers = ctx.collections["REQUEST_HEADERS"]
+
+		if headers and next(self._event_log_redacted_headers) then
+			-- copy first: the collection is still read by rules in later phases
+			headers = util.table_copy(headers)
+
+			for name in pairs(self._event_log_redacted_headers) do
+				if type(headers[name]) == "string" then
+					headers[name] = string_sub(headers[name], 1, 8)
+				end
+			end
+		end
+
+		entry.request_headers = headers
 	end
 
 	if self._event_log_request_body then
