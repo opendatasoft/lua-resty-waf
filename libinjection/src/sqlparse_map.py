@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # pylint: disable=C0301,C0302
 # Turn off line-too-long, and too-many-lines warnings
 #
@@ -1562,6 +1562,6 @@ if __name__ == '__main__':
     if len(CHARMAP) != 256:
         sys.stderr.write("Assert failed: charmap is %d characters\n" % len(CHARMAP))
         sys.exit(1)
-    print dump()
+    print(dump())
 
 # pylint: disable=C0301,C0302

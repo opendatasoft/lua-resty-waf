@@ -17,10 +17,6 @@ ARG OPENRESTY_OPENSSL3
 ARG OPENRESTY_PCRE2
 ARG OPENRESTY_ZLIB
 ARG OPENRESTY_PREFIX
-ARG OPM_IPUTILS
-ARG OPM_COOKIE
-ARG OPM_LIBINJECTION
-ARG OPM_LOGGER
 ARG ROCK_LREXLIB_PCRE
 ARG ROCK_LREXLIB_PCRE2
 ARG ROCK_BUSTED
@@ -85,6 +81,11 @@ deb %s://snapshot.debian.org/archive/debian-security/%s bookworm-security main\n
 
 # OpenResty (debug build only)
 # Debian component is 'openresty', not 'main'.
+#
+# openresty-resty is named explicitly because nothing pulls it in any
+# more. It used to arrive as a transitive dependency of openresty-opm,
+# which this image no longer installs, and rebusted runs the t/translation
+# specs by invoking `resty`. Losing it fails that gate and nothing else.
 RUN set -eux; \
     curl -fsSL https://openresty.org/package/pubkey.gpg \
       | gpg --dearmor -o /usr/share/keyrings/openresty.gpg; \
@@ -93,25 +94,21 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         openresty-debug="${OPENRESTY_VERSION}" \
-        openresty-opm="${OPENRESTY_VERSION}" \
+        openresty-resty="${OPENRESTY_VERSION}" \
         openresty-openssl3-debug="${OPENRESTY_OPENSSL3}" \
         openresty-pcre2="${OPENRESTY_PCRE2}" \
         openresty-zlib="${OPENRESTY_ZLIB}"; \
     rm -rf /var/lib/apt/lists/*; \
-    "${OPENRESTY_PREFIX}/nginx/sbin/nginx" -V 2>&1 | grep -q -- --with-debug
+    "${OPENRESTY_PREFIX}/nginx/sbin/nginx" -V 2>&1 | grep -q -- --with-debug; \
+    command -v resty; \
+    if command -v opm; then echo "opm client installed; see VENDOR.md" >&2; exit 1; fi
 
-# OPM modules, into the debug prefix
-# Installing these into the *wrong* prefix is the trap that made
-# 01_protocol_violations.t fail with a misleading "loop or previous error
-# loading module 'resty.waf'". Only one prefix exists here, so it cannot
-# recur, but assert anyway.
-RUN set -eux; \
-    /usr/local/openresty/bin/opm --install-dir="${OPENRESTY_PREFIX}/site" get \
-        "${OPM_IPUTILS}" \
-        "${OPM_COOKIE}" \
-        "${OPM_LIBINJECTION}" \
-        "${OPM_LOGGER}"; \
-    test -f "${OPENRESTY_PREFIX}/site/lualib/resty/logger/socket.lua"
+# No OPM stage, and no openresty-opm package above. All four modules this
+# image used to fetch (iputils, cookie, libinjection, logger-socket) are
+# vendored under lib/resty/ and arrive with the source at /build.
+# Installing them into the wrong prefix used to be a live trap: it is what
+# made 01_protocol_violations.t fail with a misleading "loop or previous
+# error loading module 'resty.waf'". There is no prefix to get wrong now.
 
 # LuaRocks
 # rex_pcre2 is copied to lualib/ because luarocks' own --tree layout
@@ -146,16 +143,6 @@ RUN set -eux; \
     cp /tmp/fixture.tar.gz /opt/fixtures/aho-corasick/image.bin; \
     gzip -dc /tmp/fixture.tar.gz > /opt/fixtures/aho-corasick/text.tar; \
     rm -f /tmp/fixture.tar.gz
-
-# git ownership
-# The mounted checkout (and therefore the copy built from it) is owned
-# by whoever cloned it: a laptop user, or the runner user under GitHub
-# Actions. This container runs as root, and git refuses to operate on a
-# repository owned by someone else ("detected dubious ownership"), which
-# breaks `make test-libs`: clean-libinjection runs `git checkout` inside
-# the submodule. The container is disposable and the repository is the
-# user's own, so there is nothing to protect against here.
-RUN git config --global --add safe.directory '*'
 
 COPY entrypoint.sh run-tests.sh manifest.sh /ci/
 RUN chmod +x /ci/*.sh

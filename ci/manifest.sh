@@ -23,11 +23,15 @@ echo
 echo "## dpkg"
 dpkg-query -W -f='${Package}=${Version}\n' | sort
 
+# Nothing to enumerate: every module this project once fetched from OPM
+# is vendored. This records only whether a client is present. It is not
+# the check that an OPM dependency has not returned, because `make
+# manifest` writes whatever this prints straight into manifest.lock and
+# would launder a regression into the baseline. ci/Dockerfile asserts it
+# at build time, where it can fail.
 echo
 echo "## opm"
-(cd "${PREFIX}/site" && find . -name '*.opm.meta' -o -name 'dist.ini' 2>/dev/null \
-    | sort) || true
-ls -1 "${PREFIX}/site/lualib/resty" 2>/dev/null | sort | sed 's/^/resty\//'
+if command -v opm >/dev/null 2>&1; then echo "client present"; else echo "none (all vendored)"; fi
 
 echo
 echo "## luarocks"

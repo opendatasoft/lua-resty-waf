@@ -101,10 +101,13 @@ lua-resty-waf was initially developed by Robert Paprocki for his Master's thesis
 
 It is recommended to install lua-resty-waf on a system running the OpenResty software bundle; lua-resty-waf has not been tested on platforms built using separate Nginx source and Nginx Lua module packages.
 
-lua-resty-waf depends on several third-party modules that are **not** bundled with it. `make install-deps` installs them all:
+lua-resty-waf depends on a few third-party modules that are **not** bundled with it. `make install-deps` installs them all:
 
-* OPM: `lua-resty-iputils`, `lua-resty-cookie`, `lua-ffi-libinjection`, `lua-resty-logger-socket`
-* LuaRocks: `lrexlib-pcre2`, and `luafilesystem`
+* LuaRocks: `lrexlib-pcre`, `lrexlib-pcre2`, `busted`, and `luafilesystem`
+
+That list used to include four OPM packages: `lua-resty-iputils`, `lua-resty-cookie`, `lua-ffi-libinjection` and `lua-resty-logger-socket`. All four are now vendored under `lib/resty/`, at exactly the bytes OPM served for the versions this project pinned, so this fork needs no OPM client. `make install` copies them into place with everything else, and nothing about a deployment changes. Their provenance and licences are recorded in [VENDOR.md](VENDOR.md).
+
+One of the four sits in a subdirectory. Deployments that copy files into place by hand rather than using `make install` must carry `lib/resty/logger/socket.lua` over as well; `cp lib/resty/*.lua` does not descend into it, and `lib/resty/waf/log.lua` requires the module unconditionally, so workers fail at startup with `module 'resty.logger.socket' not found`.
 
 Note that `lrexlib-pcre2` is required by every deployment, not only by users of `load_secrules()`: `resty.waf` loads `resty.waf.translate` when the module is first required, and that in turn requires `rex_pcre2`. If it is missing, or is installed somewhere outside nginx's `lua_package_cpath`, workers fail at startup with `module 'rex_pcre2' not found`. `make install-deps` copies it into `$OPENRESTY_PREFIX/lualib/` for this reason.
 
@@ -130,7 +133,7 @@ A simple Makefile is provided:
 
 Do not install this fork from LuaRocks: the published `lua-resty-waf` rock is upstream's last release and does not contain the fixes carried here.
 
-Dependency installation uses the [OPM](https://github.com/openresty/opm) package manager, available in modern OpenResty distributions, and LuaRocks. The OPM client requires that the `resty` command line tool is available in your system's `PATH` environmental variable.
+Dependency installation uses LuaRocks. Upstream also required the [OPM](https://github.com/openresty/opm) client, and therefore the `resty` command line tool on your `PATH`. This fork does not.
 
 Note that by default lua-resty-waf runs in SIMULATE mode, to prevent immediately affecting an application; users who wish to enable rule actions must explicitly set the operational mode to ACTIVE.
 

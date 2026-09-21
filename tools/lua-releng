@@ -23,7 +23,18 @@ if ($#ARGV != -1) {
     # Third-party vendored sources are not ours to lint. lib/util.lua is
     # an unmodified copy of Mozilla's heka util module (MPL-2.0) that
     # lib/resty/waf/util.lua requires; it uses globals this check flags.
-    my %vendored = map { $_ => 1 } qw{ lib/util.lua };
+    # The rest are unmodified third-party copies (see VENDOR.md):
+    # the four former OPM modules, and htmlentities.lua, which `make`
+    # copies here out of lua-resty-htmlentities. Linting them would only
+    # report style we have deliberately not changed.
+    my %vendored = map { $_ => 1 } qw{
+        lib/util.lua
+        lib/resty/cookie.lua
+        lib/resty/htmlentities.lua
+        lib/resty/iputils.lua
+        lib/resty/libinjection.lua
+        lib/resty/logger/socket.lua
+    };
     @luas = grep { !$vendored{$_} } @luas;
 
     if (-d 't') {

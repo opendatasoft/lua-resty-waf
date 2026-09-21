@@ -1,17 +1,20 @@
 OPENRESTY_PREFIX ?= /usr/local/openresty
 LUA_LIB_DIR      ?= $(OPENRESTY_PREFIX)/site/lualib
-INSTALL_SOFT     ?= ln -s
+INSTALL_SOFT     ?= ln -sfn
 INSTALL          ?= install
 RESTY_BINDIR      = $(OPENRESTY_PREFIX)/bin
-OPM               = $(RESTY_BINDIR)/opm
-OPM_LIB_DIR      ?= $(OPENRESTY_PREFIX)/site
 PWD               = `pwd`
 LUAROCKS         ?= luarocks
 
-LIBS       = waf waf.lua htmlentities.lua
+# everything install/install-link place directly under
+# $(LUA_LIB_DIR)/resty/, and therefore everything clean-install removes
+# from it. The vendored modules are listed because nothing else
+# uninstalls them; `opm remove` via clean-opm-libs used to.
+# resty/logger/ is handled separately: the directory can hold other
+# projects' resty.logger.* modules, so only socket.lua is ours to delete.
+LIBS       = waf waf.lua htmlentities.lua cookie.lua iputils.lua \
+	libinjection.lua
 C_LIBS     = lua-aho-corasick lua-resty-htmlentities libinjection
-OPM_LIBS   = hamishforbes/lua-resty-iputils p0pr0ck5/lua-resty-cookie \
-	p0pr0ck5/lua-ffi-libinjection p0pr0ck5/lua-resty-logger-socket
 MAKE_LIBS  = $(C_LIBS) decode
 SO_LIBS    = libac.so libinjection.so libhtmlentities.so libdecode.so
 # vendored, not fetched: lib/resty/waf/util.lua requires it as a bare
@@ -24,7 +27,7 @@ LOCAL_LIB_DIR = lib/resty
 
 .PHONY: all test install clean test-unit test-acceptance test-regression \
 test-translate lua-aho-corasick lua-resty-htmlentities libinjection \
-clean-libinjection clean-lua-aho-corasick install-opm-libs clean-opm-libs \
+clean-libinjection clean-lua-aho-corasick \
 image test-docker shell-docker manifest verify-manifest
 
 all: $(MAKE_LIBS) debug-macro
@@ -38,12 +41,13 @@ clean-debug-macro:
 clean-install: clean-deps
 	rm -f $(RESTY_BINDIR)/validate-rules
 	cd $(LUA_LIB_DIR) && rm -rf $(RULES) && rm -f $(SO_LIBS) $(HEKA_UTIL) && \
-		cd resty/ && rm -rf $(LIBS)
+		cd resty/ && rm -rf $(LIBS) && rm -f logger/socket.lua
+	-rmdir $(LUA_LIB_DIR)/resty/logger
 
 clean-decode:
 	cd src && make clean
 
-clean-deps: clean-opm-libs clean-rocks
+clean-deps: clean-rocks
 
 clean-lua-aho-corasick:
 	cd lua-aho-corasick && make clean
@@ -53,13 +57,10 @@ clean-lua-resty-htmlentities:
 	rm -f lib/resty/htmlentities.lua
 
 clean-libinjection:
-	cd libinjection && make clean && git checkout -- .
+	cd libinjection && make clean
 
 clean-libs:
 	cd lib && rm -f $(SO_LIBS)
-
-clean-opm-libs:
-	$(OPM) --install-dir=$(OPM_LIB_DIR) remove $(OPM_LIBS)
 
 clean-rocks:
 	for ROCK in $(ROCK_DEPS); do \
@@ -87,7 +88,6 @@ lua-resty-htmlentities:
 	cp $@/libhtmlentities.so lib/
 
 libinjection:
-	./tools/fix-libinjection-py3.sh
 	cd $@ && make all
 	cp $@/src/$@.so lib/
 
@@ -167,10 +167,9 @@ test-fast: all
 install-check:
 	stat lib/*.so > /dev/null
 
-install-deps: install-opm-libs install-rocks
-
-install-opm-libs:
-	$(OPM) --install-dir=$(OPM_LIB_DIR) get $(OPM_LIBS)
+# No OPM step. Every module this project used to fetch from OPM is
+# vendored under lib/resty/ (see VENDOR.md), leaving only LuaRocks.
+install-deps: install-rocks
 
 install-rocks:
 	for ROCK in $(ROCK_DEPS); do \
@@ -181,8 +180,14 @@ install-rocks:
 	# lua_package_cpath; copy it where nginx will actually find it
 	cp $(OPENRESTY_PREFIX)/lib/lua/5.1/rex_pcre2.so $(OPENRESTY_PREFIX)/lualib/
 
+# resty/logger/ is linked file by file: symlinking the directory itself
+# would nest inside an existing one rather than replace it, and a prefix
+# that still holds the OPM-era install has exactly that.
 install-link: install-check
-	$(INSTALL_SOFT) $(PWD)/lib/resty/* $(LUA_LIB_DIR)/resty/
+	$(INSTALL) -d $(LUA_LIB_DIR)/resty/logger
+	$(INSTALL_SOFT) $(PWD)/lib/resty/*.lua $(LUA_LIB_DIR)/resty/
+	$(INSTALL_SOFT) $(PWD)/lib/resty/waf $(LUA_LIB_DIR)/resty/
+	$(INSTALL_SOFT) $(PWD)/lib/resty/logger/*.lua $(LUA_LIB_DIR)/resty/logger/
 	$(INSTALL_SOFT) $(PWD)/lib/*.so $(LUA_LIB_DIR)
 	$(INSTALL_SOFT) $(PWD)/lib/$(HEKA_UTIL) $(LUA_LIB_DIR)
 	$(INSTALL_SOFT) $(PWD)/rules/ $(LUA_LIB_DIR)
@@ -190,8 +195,10 @@ install-link: install-check
 
 install: install-check install-deps
 	$(INSTALL) -d $(LUA_LIB_DIR)/resty/waf/storage
+	$(INSTALL) -d $(LUA_LIB_DIR)/resty/logger
 	$(INSTALL) -d $(LUA_LIB_DIR)/rules
 	$(INSTALL) -m 644 lib/resty/*.lua $(LUA_LIB_DIR)/resty/
+	$(INSTALL) -m 644 lib/resty/logger/*.lua $(LUA_LIB_DIR)/resty/logger/
 	$(INSTALL) -m 644 lib/resty/waf/*.lua $(LUA_LIB_DIR)/resty/waf/
 	$(INSTALL) -m 644 lib/resty/waf/storage/*.lua $(LUA_LIB_DIR)/resty/waf/storage/
 	$(INSTALL) -m 644 lib/*.so $(LUA_LIB_DIR)
