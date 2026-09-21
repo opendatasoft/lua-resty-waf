@@ -815,7 +815,7 @@ location / {
 
 Names the request headers whose value is truncated to its first 8 characters in the log entry. Names are matched case-insensitively, as nginx reports header names lowercased. A prefix is kept rather than removing the value outright so that requests from the same client can still be correlated.
 
-This has effect only when `event_log_request_headers` is set; it does not enable header logging by itself. It also does not change what rules see: redaction happens when the entry is written, and the matching engine always reads the true value. A header sent more than once arrives as a table of values, and is logged unredacted.
+This has effect only when `event_log_request_headers` is set; it does not enable header logging by itself. It also does not change what rules see: redaction happens when the entry is written, and the matching engine always reads the true value. A header sent more than once arrives as a table of values, and every value in it is truncated, since otherwise repeating the header would be enough to keep a credential out of the redaction path.
 
 *Example*:
 

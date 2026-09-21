@@ -1047,8 +1047,19 @@ function _M.write_log_events(self, has_ctx, ctx)
 			headers = util.table_copy(headers)
 
 			for name in pairs(self._event_log_redacted_headers) do
-				if type(headers[name]) == "string" then
-					headers[name] = string_sub(headers[name], 1, 8)
+				local value = headers[name]
+
+				if type(value) == "string" then
+					headers[name] = string_sub(value, 1, 8)
+				elseif type(value) == "table" then
+					-- ngx.req.get_headers() hands back an array when the
+					-- same header is sent more than once, so redacting only
+					-- strings would let a client keep a credential out of the
+					-- redaction path by repeating the header. table_copy is
+					-- recursive, so this array is ours to write to.
+					for i, v in ipairs(value) do
+						value[i] = string_sub(v, 1, 8)
+					end
 				end
 			end
 		end

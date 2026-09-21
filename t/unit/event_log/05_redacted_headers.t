@@ -9,8 +9,8 @@ our $HttpConfig = qq{
 };
 
 repeat_each(3);
-# TEST 1 has 3 assertions, TEST 2 has 6, TEST 3 has 4, TEST 4 has 5
-plan tests => repeat_each() * (3 + 6 + 4 + 5);
+# TEST 1 has 3 assertions, TEST 2 has 6, TEST 3 has 4, TEST 4 has 5, TEST 5 has 4
+plan tests => repeat_each() * (3 + 6 + 4 + 5 + 4);
 
 no_shuffle();
 run_tests();
@@ -183,4 +183,41 @@ qr/Match of rule 12021/,
 qr/"msg":"redact header check"/
 ]
 --- no_error_log
+[error]
+
+=== TEST 5: Truncate every value of a header sent more than once
+--- http_config eval: $::HttpConfig
+--- config
+	location /t {
+		access_by_lua_block {
+			local lua_resty_waf = require "resty.waf"
+			local waf           = lua_resty_waf:new()
+
+			waf:set_option("debug", true)
+			waf:set_option("event_log_altered_only", false)
+			waf:set_option("event_log_request_headers", true)
+			waf:set_option("event_log_redacted_headers", { "x-api-key" })
+			waf:exec()
+		}
+
+		content_by_lua_block {ngx.exit(ngx.HTTP_OK)}
+
+		log_by_lua_block {
+			local lua_resty_waf = require "resty.waf"
+			local waf           = lua_resty_waf:new()
+
+			waf:write_log_events()
+		}
+	}
+--- request
+GET /t
+--- more_headers
+User-Agent: lua-resty-waf Dummy
+X-Api-Key: 0123456789abcdef
+X-Api-Key: fedcba9876543210
+--- error_code: 200
+--- error_log eval
+qr/"x-api-key":\["01234567","fedcba98"\]/
+--- no_error_log
+"0123456789abcdef"
 [error]
