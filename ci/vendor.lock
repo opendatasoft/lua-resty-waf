@@ -1,0 +1,14 @@
+# lua-resty-waf vendored content lock
+# Regenerate with: make vendor-lock
+#
+# sha256 over the tracked files under each path, and their count.
+# Upstream URL, pinned revision and licence for each entry: VENDOR.md
+
+d12fd57ae70e594fe618cf7b4107c4e7b2e7cfbb19b0229854250cb3a1d8f5a1   621  libinjection
+be58de196ac342d83f7cc08407d17369681eec0bf6fef24927b2cc049ea05b54    25  lua-aho-corasick
+f3d273c4828b6a908695f953d56d06b9e783766f4b0b2eaa40b82efd3b97254b    12  lua-resty-htmlentities
+747aefc184df7a1e1d007b96906cc77f4a646471bd1dfac6a2f09eb360d8a4b1     1  lib/resty/cookie.lua
+85134ebc41e056f1ce48993965140123c89514e7c1ddaabfc0ff03388eb5c10f     1  lib/resty/iputils.lua
+7c73f54085741e6d6cb08082a0e0710b23f4dca38dfd3701785aae36d0cb5f4e     1  lib/resty/libinjection.lua
+6799a44249e61d24500a9e28160fb796390cdcd864fb1fb4a6755a0a529bac44     1  lib/resty/logger/socket.lua
+76990cbccafb137eef0c006395451bad996e1c7f34c4be0707ff6354b7985576     1  lib/util.lua

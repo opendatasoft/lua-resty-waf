@@ -28,7 +28,8 @@ LOCAL_LIB_DIR = lib/resty
 .PHONY: all test install clean test-unit test-acceptance test-regression \
 test-translate lua-aho-corasick lua-resty-htmlentities libinjection \
 clean-libinjection clean-lua-aho-corasick \
-image test-docker shell-docker manifest verify-manifest
+image test-docker shell-docker manifest verify-manifest vendor-lock \
+verify-vendor
 
 all: $(MAKE_LIBS) debug-macro
 
@@ -151,6 +152,17 @@ manifest: image
 verify-manifest: image
 	docker run --rm --entrypoint /ci/manifest.sh $(CI_IMAGE) > /tmp/manifest.actual
 	diff -u $(CI_DIR)/manifest.lock /tmp/manifest.actual
+
+# vendored third-party content, pinned by hash
+# ci/vendor.lock is to the vendored code what ci/manifest.lock is to the
+# image. It runs on the host rather than in the test container, because
+# it reads the tracked file list from git and the container builds on a
+# copy it does not own. See tools/vendor-hash.
+vendor-lock:
+	./tools/vendor-hash > $(CI_DIR)/vendor.lock
+
+verify-vendor:
+	./tools/vendor-hash | diff -u $(CI_DIR)/vendor.lock -
 
 test-fast: all
 	TEST_NGINX_RANDOMIZE=1 PATH=$(OPENRESTY_PREFIX)/nginx/sbin:$$PATH prove \

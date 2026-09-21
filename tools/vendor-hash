@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+#
+# Content hash of every vendored third-party path, for `make verify-vendor`.
+#
+# Dropping .gitmodules removed the one thing that pinned this code
+# cryptographically. A gitlink SHA could not change without a one-line
+# diff in the superproject, and `git submodule status` reported drift for
+# free. VENDOR.md records provenance in prose, which no tool reads, so
+# without this an edit to libinjection's SQLi detector or to a vendored
+# Lua module passes every test gate, buried in thousands of lines nobody
+# reviews.
+#
+# Hashes the working-tree content of the *tracked* files under each path,
+# so a committed change and an uncommitted one are caught alike. Build
+# artifacts are untracked and therefore excluded, which is why the file
+# list comes from git rather than from find: this needs a checkout, not
+# merely a source tree. Nothing in the build or test path depends on it.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# Keep in sync with the tables in VENDOR.md.
+PATHS=(
+	libinjection
+	lua-aho-corasick
+	lua-resty-htmlentities
+	lib/resty/cookie.lua
+	lib/resty/iputils.lua
+	lib/resty/libinjection.lua
+	lib/resty/logger/socket.lua
+	lib/util.lua
+)
+
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+	echo "FATAL: not a git checkout, so vendored content cannot be verified" >&2
+	exit 1
+fi
+
+echo "# lua-resty-waf vendored content lock"
+echo "# Regenerate with: make vendor-lock"
+echo "#"
+echo "# sha256 over the tracked files under each path, and their count."
+echo "# Upstream URL, pinned revision and licence for each entry: VENDOR.md"
+echo
+
+for p in "${PATHS[@]}"; do
+	count=$(git ls-files -- "$p" | wc -l)
+	if [ "$count" -eq 0 ]; then
+		echo "FATAL: '$p' matches no tracked file" >&2
+		exit 1
+	fi
+	sum=$(git ls-files -z -- "$p" \
+		| LC_ALL=C sort -z \
+		| xargs -0 sha256sum \
+		| sha256sum \
+		| cut -d' ' -f1)
+	printf '%s  %4d  %s\n' "$sum" "$count" "$p"
+done

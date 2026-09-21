@@ -15,6 +15,27 @@ nothing.
 Nothing is modified except where stated, so each entry can be verified
 against the upstream bytes it was taken from.
 
+## Verifying
+
+`ci/vendor.lock` pins every path below by content hash. It is to the
+vendored code what `ci/manifest.lock` is to the test image.
+
+```sh
+make verify-vendor    # fail if any vendored path no longer hashes as recorded
+make vendor-lock      # regenerate, after a deliberate re-vendor
+```
+
+`.github/workflows/test.yml` runs the check on every push and pull
+request. It is what the gitlink SHAs used to do for free: without it an
+edit to libinjection's SQLi detector, or to any vendored Lua module,
+passes all seven test gates unnoticed. `tools/vendor-hash` hashes the
+tracked files' working-tree content, so committed and uncommitted changes
+are caught alike, and build artifacts are excluded because they are
+untracked.
+
+Re-vendoring is therefore: replace the path, update the table below, run
+`make vendor-lock`, and commit the three together.
+
 ## C libraries (formerly git submodules)
 
 Built by `make`, installed as `.so` files.
@@ -28,11 +49,6 @@ Built by `make`, installed as `.so` files.
 `lua-aho-corasick` is archived upstream; the others were last pushed in
 2023 and 2017.
 
-`libinjection/` is 28 MB, of which `data/` is 25 MB. Those are SQLi and
-XSS corpora, and they are load-bearing: `tests/test-samples-sqli-positive.sh`
-globs `../data/sqli-*.txt`, so `make test-libs` needs them. Dropping them
-would need a history rewrite, so the decision to carry them belongs here
-rather than in a commit message.
 
 **One local modification:** `libinjection/src/{make_parens,sqlparse_map,sqlparse2c}.py`
 are patched to run under python3. That used to be applied at build time
