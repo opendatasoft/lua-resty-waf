@@ -205,7 +205,6 @@ ncurses-bin=6.4-4
 openresty-debug=1.31.1.1-1~bookworm1
 openresty-openssl3-debug=3.5.7-1~bookworm1
 openresty-openssl3=3.5.7-1~bookworm1
-openresty-opm=1.31.1.1-1~bookworm1
 openresty-pcre2=10.48-1~bookworm1
 openresty-resty=1.31.1.1-1~bookworm1
 openresty-zlib=1.3.2-1~bookworm1
@@ -240,10 +239,7 @@ zip=3.0-13
 zlib1g=1:1.2.13.dfsg-1
 
 ## opm
-resty/cookie.lua
-resty/iputils.lua
-resty/libinjection.lua
-resty/logger
+none (all vendored)
 
 ## luarocks
 busted	2.3.0-1	installed	/usr/local/openresty-debug/lib/luarocks/rocks-5.1
