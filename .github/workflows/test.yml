@@ -20,11 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # No `submodules:` needed. libinjection, lua-aho-corasick and
+      # lua-resty-htmlentities are vendored in-tree, so a plain checkout
+      # is the whole build input.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
-        with:
-          # libinjection, lua-aho-corasick and lua-resty-htmlentities are
-          # submodules; `make` builds all three.
-          submodules: recursive
 
       # Byte-for-byte the command a developer runs locally. CI gets no
       # special code path, which is what keeps "green in CI" and "green
