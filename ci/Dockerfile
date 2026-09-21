@@ -25,15 +25,6 @@ ARG ROCK_LREXLIB_PCRE
 ARG ROCK_LREXLIB_PCRE2
 ARG ROCK_BUSTED
 ARG ROCK_LUAFILESYSTEM
-ARG CPAN_TEST_NGINX
-ARG CPAN_CLONE
-ARG CPAN_LIST_MOREUTILS
-ARG CPAN_TRY_TINY
-ARG CPAN_EXPORTER_DECLARE
-ARG CPAN_TEST_EXCEPTION
-ARG CPAN_TEST_MOCKMODULE
-ARG CPAN_TEST_WARN
-ARG CPAN_JSON
 ARG REBUSTED_SHA
 ARG FIXTURE_URL
 ARG FIXTURE_SHA256
@@ -133,19 +124,10 @@ RUN set -eux; \
     cp "${OPENRESTY_PREFIX}/lib/lua/5.1/rex_pcre2.so" "${OPENRESTY_PREFIX}/lualib/"
 
 # Perl test harness, exact versions
-RUN set -eux; \
-    cpanm --notest --no-man-pages \
-        Test::Nginx@${CPAN_TEST_NGINX} \
-        Clone@${CPAN_CLONE} \
-        List::MoreUtils@${CPAN_LIST_MOREUTILS} \
-        Try::Tiny@${CPAN_TRY_TINY} \
-        Exporter::Declare@${CPAN_EXPORTER_DECLARE} \
-        Test::Exception@${CPAN_TEST_EXCEPTION} \
-        Test::MockModule@${CPAN_TEST_MOCKMODULE} \
-        Test::Warn@${CPAN_TEST_WARN} \
-        JSON@${CPAN_JSON}; \
-    rm -rf /root/.cpanm; \
-    perl -MTest::Nginx::Socket::Lua -e1
+# ci/cpan.lock pins the whole closure, not just the nine roots this
+# project names; the script asserts the result still matches it.
+COPY cpan.lock cpan-install.sh /ci/
+RUN set -eux; bash /ci/cpan-install.sh /ci/cpan.lock
 
 # rebusted (runs the t/translation busted specs under resty)
 RUN set -eux; \

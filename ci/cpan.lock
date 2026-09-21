@@ -1,0 +1,58 @@
+# The full CPAN closure of the Perl test harness, pinned exactly.
+#
+# One `Module@version` per line, in dependency order: cpanm installs the
+# list left to right and skips a dependency that is already satisfied, so
+# a leaf must come before anything requiring it. Pinning only the nine
+# roots this project names left the other 35 on latest, which is what
+# broke the first scheduled drift run.
+#
+# Not AUTHOR/Dist-Version.tar.gz: cpanm falls back to backpan for this
+# form, and backpan keeps what CPAN mirrors prune.
+#
+# To re-resolve: edit, `make image`, read the cpanm output. The build
+# asserts the installed closure still matches this file.
+
+MIME::Base32@1.303
+URI@5.37
+Test::LongString@0.17
+IPC::Run@20260402.0
+Clone@0.50
+TimeDate@2.35
+HTTP::Date@6.08
+Encode::Locale@1.05
+IO::HTML@1.004
+LWP::MediaTypes@6.05
+HTTP::Message@7.04
+Net::HTTP@6.24
+HTTP::Cookies@6.12
+File::Listing@6.16
+WWW::RobotRules@6.03
+HTML::Tagset@3.24
+HTML::Parser@3.85
+HTTP::Negotiate@6.01
+Try::Tiny@0.32
+LWP@6.83
+Spiffy@0.46
+Test::Base@0.89
+Exporter::Tiny@1.006003
+List::MoreUtils::XS@0.430
+List::MoreUtils@0.430
+Algorithm::Diff@1.201
+Text::Diff@1.46
+Test::Nginx@0.32
+Fennec::Lite@0.004
+Sub::Uplevel@0.2800
+Test::Exception@0.43
+Meta::Builder@0.004
+ExtUtils::Config@0.010
+ExtUtils::InstallPaths@0.015
+ExtUtils::Helpers@0.028
+Module::Build::Tiny@0.053
+aliased@0.34
+Exporter::Declare@0.114
+Module::Build@0.4234
+Sub::Identify@0.14
+SUPER@1.20190531
+Test::MockModule@0.185.3
+Test::Warn@0.37
+JSON@4.10
